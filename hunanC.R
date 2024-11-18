@@ -1,3 +1,8 @@
+library(MASS)
+library(splines)
+library(Rcpp)
+library(doSNOW)
+
 
 setwd("~/Library/CloudStorage/GoogleDrive-miguel-angel.beynaerts@student.uhasselt.be/Mijn Drive/CRF simulations")
 # setwd("H:/My Drive/CRF simulations")
@@ -72,8 +77,8 @@ fit <- nlm(f = wrapper,
 
 S <- list(Srow(df), Scol(df))
 
-fit <- EstimatePenalty(datalist = datalist, degree = degree, S = S, lambda.init = c(15,15))
-fit <- EstimatePenaltyNoControl(datalist = datalist, degree = degree, S = S, lambda.init = c(15,15))
+fit <- EstimatePenalty(datalist = datalist, degree = degree, S = S, lambda.init = c(1,1))
+fit <- EstimatePenaltyNoControl(datalist = datalist, degree = degree, S = S, lambda.init = c(1,1))
 
 A.hat <- matrix(fit$estimate, ncol = df, byrow = FALSE)
 CRF <- mapply(function(x,y) exp(tensor(x,y, coef.matrix = A.hat,
