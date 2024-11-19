@@ -77,8 +77,8 @@ fit <- nlm(f = wrapper,
 
 S <- list(Srow(df), Scol(df))
 
-fit <- EstimatePenalty(datalist = datalist, degree = degree, S = S, lambda.init = c(1,1))
-fit <- EstimatePenaltyNoControl(datalist = datalist, degree = degree, S = S, lambda.init = c(1,1))
+fit <- EstimatePenalty(datalist = datalist, degree = degree, S = S, lambda.init = c(5,5))
+# fit <- EstimatePenaltyNoControl(datalist = datalist, degree = degree, S = S, lambda.init = c(1,1))
 
 A.hat <- matrix(fit$estimate, ncol = df, byrow = FALSE)
 CRF <- mapply(function(x,y) exp(tensor(x,y, coef.matrix = A.hat,

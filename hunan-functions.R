@@ -478,16 +478,30 @@ lambdaUpdate <- function(lambda.old, S.lambda.inv, S, V, beta) {
   
 }
 
-wrapper <- function(coef.vector, degree, datalist, S.lambda=NULL, minusLogLik=TRUE) {
+wrapper <- function(coef.vector, degree, datalist, S.lambda=NULL, H = NULL, minusLogLik=TRUE) {
   
   # Check whether penalty is applied
   if (is.null(S.lambda)) {
     penaltyLik <- penaltyGrad <- penaltyHess <- 0
   } else {
-    # Calculate penalty terms
+    
+    # Calculate penalty terms for log f_lambda(y,beta) Wood (2017) p.1076 
+    S.lambda.eigenv <- eigen(S.lambda)$values
+    
     penaltyLik <- (t(coef.vector) %*% S.lambda %*% coef.vector)/2
+    logS.lambda <- log(prod(S.lambda.eigenv[S.lambda.eigenv > 0]))
+    constant <- sum(S.lambda.eigenv == 0)*log(2*pi)/2 # Zie Wood (2016) p.1550
+    
     # penaltyGrad <- t(t(coef.vector) %*% S.lambda)
     # penaltyHess <- S.lambda
+  }
+  
+  # TODO implement sanity check that !is.null(S.lambda) & !is.null(H) & minusLogLik=FALSE implies laplace likelihood
+  if (is.null(H)) {
+    logdetH <- 0
+  } else {
+    logdetH <- log(det(H))
+    logS.lambda <- logS.lambda/2
   }
   
   df <- sqrt(length(coef.vector))
@@ -500,13 +514,14 @@ wrapper <- function(coef.vector, degree, datalist, S.lambda=NULL, minusLogLik=TR
   #                t1 = datalist$X[,1], t2 = datalist$X[,2], degree = degree, df = df, knots = datalist$knots,
   #                simplify = FALSE)
   
+  # log f_lambda(y,beta)
   ll <- logLikC(riskset = datalist$riskset,
                 logtheta = logtheta2,
                 delta = datalist$delta.prod,
                 I1 = datalist$I1,
                 I2 = datalist$I2,
                 I3 = datalist$I5,
-                I4 = datalist$I6) + penaltyLik
+                I4 = datalist$I6) + penaltyLik - logS.lambda + logdetH - constant
   
   
   # gradient <- gradientC(riskset = datalist$riskset,
@@ -539,29 +554,26 @@ wrapper <- function(coef.vector, degree, datalist, S.lambda=NULL, minusLogLik=TR
   
 }
 
-LaplaceLogLik <- function(coef.vector, lambda, degree, S, H, datalist) {
-  
-  S.lambda <- lambda[1]*S[[1]] + lambda[2]*S[[2]]
-  S.lambda.eigenv <- eigen(S.lambda)$values
-  
-  # TODO Wood (2016) zegt eigenv > 0 terwijl Wood (2017) eigenv =/= 0
-  logS.lambda <- log(prod(S.lambda.eigenv[S.lambda.eigenv > 0]))
-  logdetH <- log(det(H))
-  constant <- sum(S.lambda.eigenv == 0)*log(2*pi)/2 # Zie Wood (2016) p.1550
-  
-  ll <- wrapper(
-    coef.vector = coef.vector,
-    degree = degree,
-    S.lambda = S.lambda,
-    datalist = datalist,
-    minusLogLik = FALSE # Geeft loglik ipv -loglik
-  )
-  
-  laplace <- ll + logS.lambda/2 - logdetH/2 + constant
-  
-  return(laplace)
-  
-}
+# LaplaceLogLik <- function(coef.vector, degree, S.lambda, H, datalist) {
+#   
+#   logdetH <- log(det(H))
+#   
+#   S.lambda.eigenv <- eigen(S.lambda)$values
+#   logS.lambda <- log(prod(S.lambda.eigenv[S.lambda.eigenv > 0]))
+#   
+#   ll <- wrapper(
+#     coef.vector = coef.vector,
+#     degree = degree,
+#     S.lambda = S.lambda,
+#     datalist = datalist,
+#     minusLogLik = FALSE # Geeft loglik ipv -loglik
+#   )
+#   
+#   laplace <- ll - logdetH/2
+#   
+#   return(laplace)
+#   
+# }
 
 # TODO Waarom wordt er geen step length control gebruikt in de voorbeelden van Wood?
 EstimatePenalty <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0.01, maxiter=50) {
@@ -571,7 +583,7 @@ EstimatePenalty <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0.0
   
   df <- sqrt(ncol(S1))
   
-  lambda <- lambda.init # In voorbeelden van Wood (2017) is de initiele lambda = 1
+  lambda.new <- lambda.init # In voorbeelden van Wood (2017) is de initiele lambda = 1
   
   lldiff <- 1e10
   beta <- rep(1,df^2)
@@ -586,10 +598,10 @@ EstimatePenalty <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0.0
     # Update number of iterations
     iter = iter + 1
     
-    lambda.old <- lambda
+    lambda <- lambda.new
     
     # Some calculations to update lambda later...
-    S.lambda <- lambda.old[1]*S1 + lambda.old[2]*S2
+    S.lambda <- lambda[1]*S1 + lambda[2]*S2
     S.lambda.inv <- ginv(S.lambda)
     
     # Estimate betas for given lambdas
@@ -608,11 +620,13 @@ EstimatePenalty <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0.0
     A <- diag(abs(decomp$values))
     hessian.obs <- decomp$vectors %*% A %*% t(decomp$vectors)
     
-    H <- hessian.obs + S.lambda
-    V <- solve(H)
+    V <- solve(hessian.obs + S.lambda)
     
     # Update lambdas
-    lambda <- lambdaUpdate(lambda.old, S.lambda.inv, S, V, beta)
+    lambda.new <- lambdaUpdate(lambda, S.lambda.inv, S, V, beta)
+    
+    # Create new S.lambda matrix
+    S.lambda.new <- lambda.new[1]*S1 + lambda.new[2]*S2
     
     # lambda <- c((sum(diag(S.lambda.inv %*% S1)) - sum(diag(V %*% S1))) /
     #               (t(beta.new) %*% S1 %*% beta.new),
@@ -620,27 +634,25 @@ EstimatePenalty <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0.0
     #               (t(beta.new) %*% S2 %*% beta.new))
    
     # Step length of update
-    diff <- lambda - lambda.old
-   
-    # l1 = loglikelihood(lambda.old + delta)
-    # l0 = loglikelihood(lambda.old)
+    diff <- lambda.new - lambda
     
-    # BUG CORRECTED This is not correct!! l1 and l0 should be the laplace likelihood on p. 1076 leftbottom
-    l1 <- LaplaceLogLik(
+    # Assess whether update is an increase in the log-likelihood
+    # If not, apply step length control
+    l1 <- wrapper(
       coef.vector = beta,
-      lambda = lambda,
       degree = degree,
-      S = S,
-      H = H,
+      S.lambda = S.lambda.new,
+      H = hessian.obs = S.lambda.new,
+      minusLogLik = FALSE,
       datalist = datalist
     )
     
-    l0 <- LaplaceLogLik(
+    l0 <- wrapper(
       coef.vector = beta,
       degree = degree,
-      lambda = lambda.old,
-      S = S,
-      H = H,
+      S.lambda = S.lambda,
+      H = hessian.obs + lambda,
+      minusLogLik = FALSE,
       datalist = datalist
     )
   
@@ -653,21 +665,23 @@ EstimatePenalty <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0.0
       
       delta <- diff/(2^k)
       
-      l1 <- LaplaceLogLik(
+      S.lambda.delta <- (lambda + delta)[1]*S1 + (lambda + delta)[2]*S2
+      
+      l1 <- wrapper(
         coef.vector = beta,
-        lambda = lambda.old + delta,
         degree = degree,
-        S = S,
-        H = H,
+        S.lambda = S.lambda.delta,
+        H = hessian.obs + S.lambda.delta,
+        minusLogLik = FALSE,
         datalist = datalist
       )
       
-      l0 <- LaplaceLogLik(
+      l0 <- wrapper(
         coef.vector = beta,
         degree = degree,
-        lambda = lambda.old,
-        S = S,
-        H = H,
+        S.lambda = S.lambda,
+        H = hessian.obs + S.lambda,
+        minusLogLik = FALSE,
         datalist = datalist
       )
       
@@ -698,11 +712,13 @@ EstimatePenalty <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0.0
 
   return(list(
     beta = beta,
-    lambda = lambda,
+    lambda = lambda.new,
     iterations = iter,
     status = message))
 }
 
+# TODO change notation lambda.old -> lambda and lambda -> lambda.new
+# TODO change LaplaceLogLik attributes to correspond to change in function definition
 EstimatePenaltyNoControl <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0.01, maxiter=50) {
   
   S1 <- S[[1]]
