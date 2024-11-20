@@ -642,7 +642,7 @@ EstimatePenalty <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0.0
       coef.vector = beta,
       degree = degree,
       S.lambda = S.lambda.new,
-      H = hessian.obs = S.lambda.new,
+      H = hessian.obs + S.lambda.new,
       minusLogLik = FALSE,
       datalist = datalist
     )
@@ -651,7 +651,7 @@ EstimatePenalty <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0.0
       coef.vector = beta,
       degree = degree,
       S.lambda = S.lambda,
-      H = hessian.obs + lambda,
+      H = hessian.obs + S.lambda,
       minusLogLik = FALSE,
       datalist = datalist
     )
@@ -692,17 +692,17 @@ EstimatePenalty <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0.0
     
     # If step length control is needed, set updated lambda according to new step length
     if (k > 0) {
-      lambda <- lambda.old + delta
+      lambda.new <- lambda + delta
     }
     
     # Sanity check: lambda must be positive
-    if (sum(lambda < 0) > 0) {stop("lambda is negative")}
+    if (sum(lambda.new < 0) > 0) {stop("At least 1 lambda is negative")}
     
     # Print information while running...
     print(paste0("Iteration ", iter,
                  ": k = ", k,
-                 " lambda1 = ", lambda[1],
-                 " lambda2 = ", lambda[2],
+                 " lambda1 = ", lambda.new[1],
+                 " lambda2 = ", lambda.new[2],
                  " Likelihood increase = ", lldiff))
     
   } # end of outer while loop
@@ -717,8 +717,6 @@ EstimatePenalty <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0.0
     status = message))
 }
 
-# TODO change notation lambda.old -> lambda and lambda -> lambda.new
-# TODO change LaplaceLogLik attributes to correspond to change in function definition
 EstimatePenaltyNoControl <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0.01, maxiter=50) {
   
   S1 <- S[[1]]
@@ -726,7 +724,7 @@ EstimatePenaltyNoControl <- function(datalist, degree, S, lambda.init = c(1,1), 
   
   df <- sqrt(ncol(S1))
   
-  lambda <- lambda.init # In voorbeelden van Wood (2017) is de initiele lambda = 1
+  lambda.new <- lambda.init # In voorbeelden van Wood (2017) is de initiele lambda = 1
   
   lldiff <- 1e10
   beta <- rep(1,df^2)
@@ -735,16 +733,15 @@ EstimatePenaltyNoControl <- function(datalist, degree, S, lambda.init = c(1,1), 
   
   if (iter == 0) {print("Algorithm running...")}
   
-  # TODO norm(diff, type = "2") is duidelijk geen goed stopping criterium. Probeer misschien via l1-l0?
   while (lldiff > tol & iter <= maxiter) {
     
     # Update number of iterations
     iter = iter + 1
     
-    lambda.old <- lambda
+    lambda <- lambda.new
     
     # Some calculations to update lambda later...
-    S.lambda <- lambda.old[1]*S1 + lambda.old[2]*S2
+    S.lambda <- lambda[1]*S1 + lambda[2]*S2
     S.lambda.inv <- ginv(S.lambda)
     
     # Estimate betas for given lambdas
@@ -763,41 +760,54 @@ EstimatePenaltyNoControl <- function(datalist, degree, S, lambda.init = c(1,1), 
     A <- diag(abs(decomp$values))
     hessian.obs <- decomp$vectors %*% A %*% t(decomp$vectors)
     
-    H <- hessian.obs + S.lambda
-    V <- solve(H)
+    V <- solve(hessian.obs + S.lambda)
     
     # Update lambdas
-    lambda <- lambdaUpdate(lambda.old, S.lambda.inv, S, V, beta)
+    lambda.new <- lambdaUpdate(lambda, S.lambda.inv, S, V, beta)
     
-    # BUG CORRECTED This is not correct!! l1 and l0 should be the laplace likelihood on p. 1076 leftbottom
-    l1 <- LaplaceLogLik(
+    # Create new S.lambda matrix
+    S.lambda.new <- lambda.new[1]*S1 + lambda.new[2]*S2
+    
+    # lambda <- c((sum(diag(S.lambda.inv %*% S1)) - sum(diag(V %*% S1))) /
+    #               (t(beta.new) %*% S1 %*% beta.new),
+    #             (sum(diag(S.lambda.inv %*% S2)) - sum(diag(V %*% S2))) /
+    #               (t(beta.new) %*% S2 %*% beta.new))
+    
+    # Step length of update
+    diff <- lambda.new - lambda
+    
+    # Assess whether update is an increase in the log-likelihood
+    # If not, apply step length control
+    l1 <- wrapper(
       coef.vector = beta,
-      lambda = lambda,
       degree = degree,
-      S = S,
-      H = H,
+      S.lambda = S.lambda.new,
+      H = hessian.obs + S.lambda.new,
+      minusLogLik = FALSE,
       datalist = datalist
     )
     
-    l0 <- LaplaceLogLik(
+    l0 <- wrapper(
       coef.vector = beta,
       degree = degree,
-      lambda = lambda.old,
-      S = S,
-      H = H,
+      S.lambda = S.lambda,
+      H = hessian.obs + S.lambda,
+      minusLogLik = FALSE,
       datalist = datalist
     )
     
     # Final difference in loglikelihood
     lldiff <- l1 - l0
     
+    if(lldiff < 0) {message("The likelihood decreased for new lambda"); break}
+
     # Sanity check: lambda must be positive
-    if (sum(lambda < 0) > 0) {stop("lambda is negative")}
+    if (sum(lambda.new < 0) > 0) {stop("At least 1 lambda is negative")}
     
     # Print information while running...
     print(paste0("Iteration ", iter,
-                 " lambda1 = ", lambda[1],
-                 " lambda2 = ", lambda[2],
+                 " lambda1 = ", lambda.new[1],
+                 " lambda2 = ", lambda.new[2],
                  " Likelihood increase = ", lldiff))
     
   } # end of outer while loop
@@ -807,7 +817,7 @@ EstimatePenaltyNoControl <- function(datalist, degree, S, lambda.init = c(1,1), 
   
   return(list(
     beta = beta,
-    lambda = lambda,
+    lambda = lambda.new,
     iterations = iter,
     status = message))
 }
