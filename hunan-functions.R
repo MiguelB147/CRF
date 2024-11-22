@@ -126,6 +126,22 @@ loglikCpp <- function(coef.vector, degree, df, datalist) {
   return(-(L1+L2))
 }
 
+loglikAsym <- function(coef.vector, degree, df, datalist) {
+  
+  logtheta2 <- tensor(datalist$X[,1], datalist$X[,2], degree = degree, coef.vector = coef.vector, df = df, knots = datalist$knots)
+  
+  L1 <- logLikC2(riskset = t(datalist$riskset),
+                 logtheta = t(logtheta2),
+                 delta = t(datalist$delta.prod),
+                 I1 = datalist$I1, I2 = datalist$I2, I3 = datalist$I5)
+  # L2 <- logLikC2(riskset = datalist$riskset,
+  #                logtheta = logtheta2,
+  #                delta = datalist$delta.prod,
+  #                I1 = t(datalist$I2), I2 = t(datalist$I1), I3 = datalist$I6)
+  
+  return(-L1)
+}
+
 loglikPenal <- function(coef.vector, degree, df, datalist, lambda) {
   
   S1 <- Srow(df)
@@ -554,6 +570,46 @@ wrapper <- function(coef.vector, degree, datalist, S.lambda=NULL, H = NULL, minu
   
 }
 
+wrapperTest <- function(coef.vector, degree, datalist, S.lambda=NULL, H = NULL, minusLogLik=TRUE) {
+  
+  # Check whether penalty is applied
+  if (is.null(S.lambda)) {
+    penaltyLik <- penaltyGrad <- penaltyHess <- 0
+  } else {
+    
+    # Calculate penalty terms for log f_lambda(y,beta) Wood (2017) p.1076 
+    S.lambda.eigenv <- eigen(S.lambda)$values
+    
+    penaltyLik <- (t(coef.vector) %*% S.lambda %*% coef.vector)/2
+    logS.lambda <- log(prod(S.lambda.eigenv[S.lambda.eigenv > 0]))
+    constant <- sum(S.lambda.eigenv == 0)*log(2*pi)/2 # Zie Wood (2016) p.1550
+    
+    # penaltyGrad <- t(t(coef.vector) %*% S.lambda)
+    # penaltyHess <- S.lambda
+  }
+  
+  # TODO implement sanity check that !is.null(S.lambda) & !is.null(H) & minusLogLik=FALSE implies laplace likelihood
+  if (is.null(H)) {
+    logdetH <- 0
+  } else {
+    logdetH <- log(det(H))
+    logS.lambda <- logS.lambda/2
+  }
+  
+  df <- sqrt(length(coef.vector))
+  
+  
+  # log f_lambda(y,beta)
+  ll <- logLikAsym(coef.vector, degree, df, datalist) + penaltyLik - logS.lambda + logdetH - constant
+  
+  
+  # Merk op dat C++ code geïmplementeerd is voor -loglik
+  sign <- ifelse(isTRUE(minusLogLik), 1, -1)
+  
+  return(sign*ll)
+  
+}
+
 # LaplaceLogLik <- function(coef.vector, degree, S.lambda, H, datalist) {
 #   
 #   logdetH <- log(det(H))
@@ -821,3 +877,140 @@ EstimatePenaltyNoControl <- function(datalist, degree, S, lambda.init = c(1,1), 
     iterations = iter,
     status = message))
 }
+
+EstimatePenalTest <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0.01, maxiter=50) {
+  
+  S1 <- S[[1]]
+  S2 <- S[[2]]
+  
+  df <- sqrt(ncol(S1))
+  
+  lambda.new <- lambda.init # In voorbeelden van Wood (2017) is de initiele lambda = 1
+  
+  lldiff <- 1e10
+  beta <- rep(1,df^2)
+  
+  iter <- 0
+  
+  if (iter == 0) {print("Algorithm running...")}
+  
+  # TODO norm(diff, type = "2") is duidelijk geen goed stopping criterium. Probeer misschien via l1-l0?
+  while (lldiff > tol & iter <= maxiter) {
+    
+    # Update number of iterations
+    iter = iter + 1
+    
+    lambda <- lambda.new
+    
+    # Some calculations to update lambda later...
+    S.lambda <- lambda[1]*S1 + lambda[2]*S2
+    S.lambda.inv <- ginv(S.lambda)
+    
+    # Estimate betas for given lambdas
+    beta.fit <- nlm(f = wrapperTest,
+                    p = beta,
+                    degree = degree,
+                    S.lambda = S.lambda,
+                    datalist = datalist,
+                    hessian = TRUE)
+    
+    # New betas to be used as initial values for possible next iteration
+    beta <- beta.fit$estimate
+    
+    # Make sure that observed hessian is positive definite
+    decomp <- eigen(beta.fit$hessian)
+    A <- diag(abs(decomp$values))
+    hessian.obs <- decomp$vectors %*% A %*% t(decomp$vectors)
+    
+    V <- solve(hessian.obs + S.lambda)
+    
+    # Update lambdas
+    lambda.new <- lambdaUpdate(lambda, S.lambda.inv, S, V, beta)
+    
+    # Create new S.lambda matrix
+    S.lambda.new <- lambda.new[1]*S1 + lambda.new[2]*S2
+    
+    # Step length of update
+    diff <- lambda.new - lambda
+    
+    # Assess whether update is an increase in the log-likelihood
+    # If not, apply step length control
+    l1 <- wrapperTest(
+      coef.vector = beta,
+      degree = degree,
+      S.lambda = S.lambda.new,
+      H = hessian.obs + S.lambda.new,
+      minusLogLik = FALSE,
+      datalist = datalist
+    )
+    
+    l0 <- wrapperTest(
+      coef.vector = beta,
+      degree = degree,
+      S.lambda = S.lambda,
+      H = hessian.obs + S.lambda,
+      minusLogLik = FALSE,
+      datalist = datalist
+    )
+    
+    # Step length control to guarantee increase in loglik
+    k = 0
+    
+    while (l1 < l0) { 
+      
+      k = k + 1
+      
+      delta <- diff/(2^k)
+      
+      S.lambda.delta <- (lambda + delta)[1]*S1 + (lambda + delta)[2]*S2
+      
+      l1 <- wrapperTest(
+        coef.vector = beta,
+        degree = degree,
+        S.lambda = S.lambda.delta,
+        H = hessian.obs + S.lambda.delta,
+        minusLogLik = FALSE,
+        datalist = datalist
+      )
+      
+      l0 <- wrapperTest(
+        coef.vector = beta,
+        degree = degree,
+        S.lambda = S.lambda,
+        H = hessian.obs + S.lambda,
+        minusLogLik = FALSE,
+        datalist = datalist
+      )
+      
+    } # end of inner while loop
+    
+    # Final difference in loglikelihood
+    lldiff <- l1 - l0
+    
+    # If step length control is needed, set updated lambda according to new step length
+    if (k > 0) {
+      lambda.new <- lambda + delta
+    }
+    
+    # Sanity check: lambda must be positive
+    if (sum(lambda.new < 0) > 0) {stop("At least 1 lambda is negative")}
+    
+    # Print information while running...
+    print(paste0("Iteration ", iter,
+                 ": k = ", k,
+                 " lambda1 = ", lambda.new[1],
+                 " lambda2 = ", lambda.new[2],
+                 " Likelihood increase = ", lldiff))
+    
+  } # end of outer while loop
+  
+  if (iter == maxiter) {message <- "Maximum iterations reached"} else {message <- "Convergence reached"}
+  
+  
+  return(list(
+    beta = beta,
+    lambda = lambda.new,
+    iterations = iter,
+    status = message))
+}
+
