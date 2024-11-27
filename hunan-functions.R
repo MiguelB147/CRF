@@ -995,22 +995,32 @@ EstimatePenalTest <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
     # Sanity check: lambda must be positive
     if (sum(lambda.new < 0) > 0) {stop("At least 1 lambda is negative")}
     
+    # Calculate loglikelihood for new lambda
+    loglik.new <- wrapperTest(coef.vector = beta,
+                              degree = degree,
+                              datalist = datalist,
+                              S.lambda = lambda.new[1]*S1 + lambda.new[2]*S2,
+                              minusLogLik=FALSE)
+    
     # Print information while running...
     print(paste0("Iteration ", iter,
                  ": k = ", k,
                  " lambda1 = ", lambda.new[1],
                  " lambda2 = ", lambda.new[2],
-                 " Likelihood increase = ", lldiff))
+                 " Likelihood increase = ", lldiff,
+                 " Final loglik = ", loglik.new))
     
   } # end of outer while loop
   
-  if (iter == maxiter) {message <- "Maximum iterations reached"} else {message <- "Convergence reached"}
   
+  
+  if (iter == maxiter) {message <- "Maximum iterations reached"} else {message <- "Convergence reached"}
   
   return(list(
     beta = beta,
     lambda = lambda.new,
     iterations = iter,
-    status = message))
+    status = message),
+    loglik = loglik)
 }
 
