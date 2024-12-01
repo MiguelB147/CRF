@@ -140,7 +140,7 @@ loglikAsym <- function(coef.vector, degree, df, datalist) {
   #                delta = datalist$delta.prod,
   #                I1 = t(datalist$I2), I2 = t(datalist$I1), I3 = datalist$I6)
   
-  return(-L1)
+  return(L1)
 }
 
 loglikPenal <- function(coef.vector, degree, df, datalist, lambda) {
@@ -572,6 +572,7 @@ wrapper <- function(coef.vector, degree, datalist, S.lambda=NULL, H = NULL, minu
 }
 
 # FIXME Waarom werkt minusLogLik niet?? Final loglik in estimatepenaltest geeft negatieve waarde
+# FIXME penaltyLik = 0 !!!!!! Probleem met S
 wrapperTest <- function(coef.vector, degree, datalist, S.lambda=NULL, H = NULL, minusLogLik=TRUE) {
   
   # Check whether penalty is applied
@@ -604,7 +605,7 @@ wrapperTest <- function(coef.vector, degree, datalist, S.lambda=NULL, H = NULL, 
   sign <- ifelse(isTRUE(minusLogLik), 1, -1)
   
   # log f_lambda(y,beta)
-  ll <- sign*(loglikAsym(coef.vector, degree, df, datalist) + penaltyLik - logS.lambda + logdetH - constant)
+  ll <- -loglikAsym(coef.vector, degree, df, datalist) + penaltyLik - logS.lambda + logdetH - constant
   
   return(ll)
   
