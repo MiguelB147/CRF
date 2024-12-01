@@ -126,6 +126,7 @@ loglikCpp <- function(coef.vector, degree, df, datalist) {
   return(-(L1+L2))
 }
 
+
 loglikAsym <- function(coef.vector, degree, df, datalist) {
   
   logtheta2 <- tensor(datalist$X[,1], datalist$X[,2], degree = degree, coef.vector = coef.vector, df = df, knots = datalist$knots)
@@ -570,6 +571,7 @@ wrapper <- function(coef.vector, degree, datalist, S.lambda=NULL, H = NULL, minu
   
 }
 
+# FIXME Waarom werkt minusLogLik niet?? Final loglik in estimatepenaltest geeft negatieve waarde
 wrapperTest <- function(coef.vector, degree, datalist, S.lambda=NULL, H = NULL, minusLogLik=TRUE) {
   
   # Check whether penalty is applied
@@ -598,15 +600,13 @@ wrapperTest <- function(coef.vector, degree, datalist, S.lambda=NULL, H = NULL, 
   
   df <- sqrt(length(coef.vector))
   
-  
-  # log f_lambda(y,beta)
-  ll <- logLikAsym(coef.vector, degree, df, datalist) + penaltyLik - logS.lambda + logdetH - constant
-  
-  
   # Merk op dat C++ code geïmplementeerd is voor -loglik
   sign <- ifelse(isTRUE(minusLogLik), 1, -1)
   
-  return(sign*ll)
+  # log f_lambda(y,beta)
+  ll <- sign*(loglikAsym(coef.vector, degree, df, datalist) + penaltyLik - logS.lambda + logdetH - constant)
+  
+  return(ll)
   
 }
 
@@ -878,6 +878,8 @@ EstimatePenaltyNoControl <- function(datalist, degree, S, lambda.init = c(1,1), 
     status = message))
 }
 
+
+
 EstimatePenalTest <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0.01, maxiter=50) {
   
   S1 <- S[[1]]
@@ -894,7 +896,6 @@ EstimatePenalTest <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
   
   if (iter == 0) {print("Algorithm running...")}
   
-  # TODO norm(diff, type = "2") is duidelijk geen goed stopping criterium. Probeer misschien via l1-l0?
   while (lldiff > tol & iter <= maxiter) {
     
     # Update number of iterations
@@ -1020,7 +1021,7 @@ EstimatePenalTest <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
     beta = beta,
     lambda = lambda.new,
     iterations = iter,
-    status = message),
-    loglik = loglik)
+    status = message,
+    loglik = loglik.new))
 }
 
