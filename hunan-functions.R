@@ -140,7 +140,7 @@ loglikAsym <- function(coef.vector, degree, df, datalist) {
   #                delta = datalist$delta.prod,
   #                I1 = t(datalist$I2), I2 = t(datalist$I1), I3 = datalist$I6)
   
-  return(L1)
+  return(-L1)
 }
 
 loglikPenal <- function(coef.vector, degree, df, datalist, lambda) {
@@ -318,6 +318,7 @@ loglik.poly <- function(coef.vector) {
 }
 
 SimData <- function (K, df, degree, unif.ub) {
+  set.seed(123)
   # set.seed(123)
   u1 <- runif(K, 0, 1)
   u2 <- runif(K, 0, 1)
@@ -605,9 +606,9 @@ wrapperTest <- function(coef.vector, degree, datalist, S.lambda=NULL, H = NULL, 
   sign <- ifelse(isTRUE(minusLogLik), 1, -1)
   
   # log f_lambda(y,beta)
-  ll <- -loglikAsym(coef.vector, degree, df, datalist) + penaltyLik - logS.lambda + logdetH - constant
+  ll <- loglikAsym(coef.vector, degree, df, datalist) + penaltyLik - logS.lambda + logdetH - constant
   
-  return(ll)
+  return(sign*ll)
   
 }
 
@@ -1002,7 +1003,7 @@ EstimatePenalTest <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
                               degree = degree,
                               datalist = datalist,
                               S.lambda = lambda.new[1]*S1 + lambda.new[2]*S2,
-                              minusLogLik=FALSE)
+                              minusLogLik=TRUE)
     
     # Print information while running...
     print(paste0("Iteration ", iter,
@@ -1010,7 +1011,7 @@ EstimatePenalTest <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
                  " lambda1 = ", lambda.new[1],
                  " lambda2 = ", lambda.new[2],
                  " Likelihood increase = ", lldiff,
-                 " Final loglik = ", loglik.new))
+                 " Final -loglik = ", loglik.new))
     
   } # end of outer while loop
   
