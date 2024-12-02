@@ -4,10 +4,11 @@ loglik <- function (param) {
   sigma <- param[11]
   
   X <- model.matrix(mpg ~ 0 + bs(hp, df = 10))
+  pred <- X %*% beta
   
-  logL <- dnorm(mpg - X %*% beta, mean = 0, sd = sigma, log = TRUE)
+  logL <- -sum(dnorm(mpg, mean = pred, sd = sigma, log = TRUE))
   
-  return(-sum(logL))
+  return(logL)
 }
 
 loglikpenal <- function (param,S.lambda) {
@@ -205,6 +206,7 @@ head(mtcars)
 attach(mtcars)
 
 library(mgcv)
+library(bbmle)
 
 fit.gam <- gam_model <- gam(mpg ~ s(hp, k = 10 ), optimizer = 'efs')
 
@@ -229,10 +231,9 @@ for (i in 1:length(lambda)) {
 
 lambda[which.min(avg)]
 
-test <- optim(
-            c(coef(fit.gam),3),
-            loglikpenal,
-            S.lambda = 16.5*S)
+test <- mle2(loglik,
+             start = c(coef(fit.gam), 3),
+             optim = "nlm")
 
 test <- EstimatePenal(S, lambda.init = 20)
 
