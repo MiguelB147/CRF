@@ -180,22 +180,6 @@ gradient <- function(coef.vector, degree, df, datalist, lambda) {
                  t1 = datalist$X[,1], t2 = datalist$X[,2], degree = degree, df = df, knots = datalist$knots,
                  simplify = FALSE)
   
-  
-  # likelihood <- sapply(deriv, function (x) {
-  #   gradientC(deriv = x, 
-  #             riskset = t(datalist$riskset), 
-  #             logtheta = t(logtheta2),
-  #             delta = t(datalist$delta.prod), 
-  #             I1 = datalist$I1, I2 = datalist$I2, I3 = datalist$I5) + 
-  #     gradientC(deriv = x, 
-  #               riskset = datalist$riskset, 
-  #               logtheta = logtheta2,
-  #               delta = datalist$delta.prod, 
-  #               I1 = t(datalist$I2), I2 = t(datalist$I1), I3 = datalist$I6)
-  #   
-  #   }
-  #                       )
-  
   gradient <- hessianC(riskset = datalist$riskset,
                        logtheta = logtheta2,
                        df = df,
@@ -438,17 +422,25 @@ SimData <- function (K, df, degree, unif.ub) {
 }
 
 
- Srow <- function(df) {
-  P <- matrix(0, ncol = df^2, nrow = df^2)
-  index.col <- df - 2
-  for (i in 1:(index.col * df)) {
-    P[i, i] <- 1
-    P[i, i + df] <- -2
-    P[i, i + 2 * df] <- 1
-  }
+# Srow <- function(df) {
+#   P <- matrix(0, ncol = df^2, nrow = df^2)
+#   index.col <- df - 2
+#   for (i in 1:(index.col * df)) {
+#     P[i, i] <- 1
+#     P[i, i + df] <- -2
+#     P[i, i + 2 * df] <- 1
+#   }
+# 
+#   return(crossprod(P))
+# 
+# }
 
+Srow <- function(df) {
+  
+  P <- diff(diag(df^2), lag = df, differences = 2)
+  
   return(crossprod(P))
-
+  
 }
 
 Scol <- function(df) {
@@ -882,7 +874,7 @@ EstimatePenaltyNoControl <- function(datalist, degree, S, lambda.init = c(1,1), 
 
 
 
-EstimatePenalTest <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0.01, maxiter=50) {
+EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0.01, maxiter=50) {
   
   S1 <- S[[1]]
   S2 <- S[[2]]
