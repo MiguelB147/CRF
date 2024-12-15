@@ -106,34 +106,34 @@ NumericMatrix DeltaC(NumericVector x, NumericVector y) {
 
 
 
-// // [[Rcpp::export]]
-// double logLikC2(const NumericMatrix riskset,
-//                const NumericMatrix logtheta,
-//                const NumericMatrix delta,
-//                const NumericMatrix I1,
-//                const NumericMatrix I2,
-//                const NumericMatrix I3) {
-// 
-//   int n = riskset.nrow();
-//   double sum = 0;
-// 
-//   /* Calculation of L1 */
-//   for (int i=0; i<n; i++) {
-//     for (int j=0; j<n; j++) {
-//       if (riskset(i,j) > 0) {
-//         sum = sum +
-//           delta(i,j)*I1(i,j)*(
-//               logtheta(i,j)*I3(i,j) -
-//               std::log(riskset(i,j) + I2(i,j)*(std::exp(logtheta(i,j)) - 1))
-//           );
-//       } else {sum = sum + 0;}
-//     }
-//   }
-//   return(sum);
-// }
+// [[Rcpp::export]]
+double logLikC(const NumericMatrix riskset,
+               const NumericMatrix logtheta,
+               const NumericMatrix delta,
+               const NumericMatrix I1,
+               const NumericMatrix I2,
+               const NumericMatrix I3) {
+
+  int n = riskset.nrow();
+  double sum = 0;
+
+  /* Calculation of L1 */
+  for (int i=0; i<n; i++) {
+    for (int j=0; j<n; j++) {
+      if (riskset(i,j) > 0) {
+        sum = sum +
+          delta(i,j)*I1(i,j)*(
+              logtheta(i,j)*I3(i,j) -
+              std::log(riskset(i,j) + I2(i,j)*(std::exp(logtheta(i,j)) - 1))
+          );
+      } else {sum = sum + 0;}
+    }
+  }
+  return(-sum);
+}
 
 
-NumericVector gradientC2(const NumericMatrix riskset,
+NumericVector gradientC(const NumericMatrix riskset,
                         const NumericMatrix logtheta,
                         const Rcpp::List deriv,
                         const int df,
@@ -181,20 +181,20 @@ NumericVector gradientC2(const NumericMatrix riskset,
   
 }
 
-// [[Rcpp::export]]
-double ScoreFunc(const NumericMatrix riskset, const NumericMatrix logthetaderiv, const NumericMatrix logtheta, const NumericMatrix delta, const NumericMatrix I1, const NumericMatrix I2) {
-  int n = riskset.nrow();
-  double sum = 0;
-  for (int i=0; i<n; i++) {
-    for (int j=0; j<n; j++) {
-      if (riskset(i,j) > 0) {
-        sum = sum +
-          (delta(i,j)*I1(i,j)*I2(i,j)*std::exp(logtheta(i,j))*logthetaderiv(i,j))/(riskset(i,j) - I2(i,j)*(1-std::exp(logtheta(i,j))));
-      } else {sum = sum + 0;}
-    } 
-  }
-  return sum;
-}
+// // [[Rcpp::export]]
+// double ScoreFunc(const NumericMatrix riskset, const NumericMatrix logthetaderiv, const NumericMatrix logtheta, const NumericMatrix delta, const NumericMatrix I1, const NumericMatrix I2) {
+//   int n = riskset.nrow();
+//   double sum = 0;
+//   for (int i=0; i<n; i++) {
+//     for (int j=0; j<n; j++) {
+//       if (riskset(i,j) > 0) {
+//         sum = sum +
+//           (delta(i,j)*I1(i,j)*I2(i,j)*std::exp(logtheta(i,j))*logthetaderiv(i,j))/(riskset(i,j) - I2(i,j)*(1-std::exp(logtheta(i,j))));
+//       } else {sum = sum + 0;}
+//     } 
+//   }
+//   return sum;
+// }
 
 // // [[Rcpp::export]]
 // double logLikC(const NumericMatrix riskset,
@@ -243,7 +243,7 @@ double ScoreFunc(const NumericMatrix riskset, const NumericMatrix logthetaderiv,
 // }
 
 // [[Rcpp::export]]
-NumericMatrix hessianC2(const NumericMatrix riskset,
+NumericMatrix hessianC(const NumericMatrix riskset,
                        const NumericMatrix logtheta,
                        const Rcpp::List deriv,
                        const int df,

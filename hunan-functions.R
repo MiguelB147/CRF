@@ -42,106 +42,108 @@ tensor <- function(t1, t2, coef.vector, df, degree, knots) {
   return(spline12)
 }
 
-tensor.deriv <- function(t1, t2, df, degree, knots) {
+# tensor.deriv <- function(t1, t2, df, degree, knots) {
+# 
+#     boundary1 <- knots[c(1,df),1]
+#     boundary2 <- knots[c(1,df),2]
+#     int1 <- knots[2:(df-1),1]
+#     int2 <- knots[2:(df-1),2]
+#     
+#     spline1 <- bs(t1, knots = int1, degree = degree, Boundary.knots = boundary1)
+#     B1 <- matrix(as.numeric(spline1), nr = nrow(spline1))
+#     spline2 <- bs(t2, knots = int2, degree = degree, Boundary.knots = boundary2)
+#     B2 <- matrix(as.numeric(spline2), nr = nrow(spline2))
+#     spline12 <- B1 %*% t(B2)
+#   
+#   return(spline12)
+# }
 
-    boundary1 <- knots[c(1,df),1]
-    boundary2 <- knots[c(1,df),2]
-    int1 <- knots[2:(df-1),1]
-    int2 <- knots[2:(df-1),2]
-    
-    spline1 <- bs(t1, knots = int1, degree = degree, Boundary.knots = boundary1)
-    B1 <- matrix(as.numeric(spline1), nr = nrow(spline1))
-    spline2 <- bs(t2, knots = int2, degree = degree, Boundary.knots = boundary2)
-    B2 <- matrix(as.numeric(spline2), nr = nrow(spline2))
-    spline12 <- B1 %*% t(B2)
-  
-  return(spline12)
-}
-
-polynomial <- function(t1,t2,coef.vec) {
-  
-  logtheta <- coef.vec[1] + coef.vec[2]*t1 + coef.vec[3]*t2 +
-    coef.vec[4]*t1^2 + coef.vec[5]*t2^2 + coef.vec[6]*t1*t2 + 
-    coef.vec[7]*(t1^2)*t2 + coef.vec[8]*t1*(t2^2) +
-    coef.vec[9]*t1^3 + coef.vec[10]*t2^3
-  
-  return(logtheta)
-  
-}
-
-riskset <- function(x, y) {
-  N <- sum(1*(X[,1] >= x & X[,2] >= y))
-  return(N)
-}
-
-loglikdf <- function(coef.vector, degree, df, knots) {
-
-  logtheta2 <- tensor(X[,1], X[,2], degree = degree, coef.vector = coef.vector, df = df, knots = knots)
-  logtheta1 <- t(logtheta2)
-  
-  B1 <- c(I5*logtheta1)[N1 > 0]
-  B2 <- c(I6*logtheta2)[N2 > 0]
-  
-  C1 <- c(N1 + I2*(exp(logtheta1)-1))[N1 > 0]
-  C2 <- c(N2 + I4*(exp(logtheta2)-1))[N2 > 0]
-  
-  
-  L1 <- sum(A1*(B1 - log(C1)))
-  L2 <- sum(A2*(B2 - log(C2)))
-  
-  return(-(L1+L2))
-}
-
-loglikdf2 <- function(coef.vector, degree, df, knots) {
-  
-  
-  logtheta2 <- tensor(X[,1],X[,2], degree = degree, coef.vector = coef.vector, df = df, knots = knots)
-  logtheta1 <- t(logtheta2)
-  
-  B1 <- c(I5*logtheta1)[N1 > 0]
-  B2 <- c(I6*logtheta2)[N2 > 0]
-  
-  C1 <- c(N1 + I2*(exp(logtheta1)-1))[N1 > 0]
-  C2 <- c(N2 + I4*(exp(logtheta2)-1))[N2 > 0]
-  
-  L1 <- sum(A1*(B1 - log(C1)))
-  L2 <- sum(A2*(B2 - log(C2)))
-  
-  return(-(L1+L2))
-}
+# polynomial <- function(t1,t2,coef.vec) {
+#   
+#   logtheta <- coef.vec[1] + coef.vec[2]*t1 + coef.vec[3]*t2 +
+#     coef.vec[4]*t1^2 + coef.vec[5]*t2^2 + coef.vec[6]*t1*t2 + 
+#     coef.vec[7]*(t1^2)*t2 + coef.vec[8]*t1*(t2^2) +
+#     coef.vec[9]*t1^3 + coef.vec[10]*t2^3
+#   
+#   return(logtheta)
+#   
+# }
+# 
+# riskset <- function(x, y) {
+#   N <- sum(1*(X[,1] >= x & X[,2] >= y))
+#   return(N)
+# }
+# 
+# loglikdf <- function(coef.vector, degree, df, knots) {
+# 
+#   logtheta2 <- tensor(X[,1], X[,2], degree = degree, coef.vector = coef.vector, df = df, knots = knots)
+#   logtheta1 <- t(logtheta2)
+#   
+#   B1 <- c(I5*logtheta1)[N1 > 0]
+#   B2 <- c(I6*logtheta2)[N2 > 0]
+#   
+#   C1 <- c(N1 + I2*(exp(logtheta1)-1))[N1 > 0]
+#   C2 <- c(N2 + I4*(exp(logtheta2)-1))[N2 > 0]
+#   
+#   
+#   L1 <- sum(A1*(B1 - log(C1)))
+#   L2 <- sum(A2*(B2 - log(C2)))
+#   
+#   return(-(L1+L2))
+# }
+# 
+# loglikdf2 <- function(coef.vector, degree, df, knots) {
+#   
+#   
+#   logtheta2 <- tensor(X[,1],X[,2], degree = degree, coef.vector = coef.vector, df = df, knots = knots)
+#   logtheta1 <- t(logtheta2)
+#   
+#   B1 <- c(I5*logtheta1)[N1 > 0]
+#   B2 <- c(I6*logtheta2)[N2 > 0]
+#   
+#   C1 <- c(N1 + I2*(exp(logtheta1)-1))[N1 > 0]
+#   C2 <- c(N2 + I4*(exp(logtheta2)-1))[N2 > 0]
+#   
+#   L1 <- sum(A1*(B1 - log(C1)))
+#   L2 <- sum(A2*(B2 - log(C2)))
+#   
+#   return(-(L1+L2))
+# }
 
 loglikCpp <- function(coef.vector, degree, df, datalist) {
   
   logtheta2 <- tensor(datalist$X[,1], datalist$X[,2], degree = degree, coef.vector = coef.vector, df = df, knots = datalist$knots)
   
-  L1 <- logLikC2(riskset = t(datalist$riskset),
+  L1 <- logLikC(riskset = t(datalist$riskset),
                 logtheta = t(logtheta2),
                 delta = t(datalist$delta.prod),
                 I1 = datalist$I1, I2 = datalist$I2, I3 = datalist$I5)
-  L2 <- logLikC2(riskset = datalist$riskset,
-                logtheta = logtheta2,
-                delta = datalist$delta.prod,
-                I1 = t(datalist$I2), I2 = t(datalist$I1), I3 = datalist$I6)
+  L2 <- 0
+  # L2 <- logLikC(riskset = datalist$riskset,
+  #               logtheta = logtheta2,
+  #               delta = datalist$delta.prod,
+  #               I1 = t(datalist$I2), I2 = t(datalist$I1), I3 = datalist$I6)
   
-  return(-(L1+L2))
+  return(L1+L2)
 }
 
 
-loglikAsym <- function(coef.vector, degree, df, datalist) {
-  
-  logtheta2 <- tensor(datalist$X[,1], datalist$X[,2], degree = degree, coef.vector = coef.vector, df = df, knots = datalist$knots)
-  
-  L1 <- logLikC2(riskset = t(datalist$riskset),
-                 logtheta = t(logtheta2),
-                 delta = t(datalist$delta.prod),
-                 I1 = datalist$I1, I2 = datalist$I2, I3 = datalist$I5)
-  # L2 <- logLikC2(riskset = datalist$riskset,
-  #                logtheta = logtheta2,
-  #                delta = datalist$delta.prod,
-  #                I1 = t(datalist$I2), I2 = t(datalist$I1), I3 = datalist$I6)
-  
-  return(-L1)
-}
+# loglikAsym <- function(coef.vector, degree, df, datalist) {
+#   
+#   logtheta2 <- tensor(datalist$X[,1], datalist$X[,2], degree = degree, coef.vector = coef.vector, df = df, knots = datalist$knots)
+#   
+#   L1 <- logLikC(riskset = t(datalist$riskset),
+#                  logtheta = t(logtheta2),
+#                  delta = t(datalist$delta.prod),
+#                  I1 = datalist$I1, I2 = datalist$I2, I3 = datalist$I5)
+#   L2 <- 0
+#   # L2 <- logLikC2(riskset = datalist$riskset,
+#   #                logtheta = logtheta2,
+#   #                delta = datalist$delta.prod,
+#   #                I1 = t(datalist$I2), I2 = t(datalist$I1), I3 = datalist$I6)
+#   
+#   return(-L1 - L2)
+# }
 
 loglikPenal <- function(coef.vector, degree, df, datalist, lambda) {
   
@@ -150,23 +152,26 @@ loglikPenal <- function(coef.vector, degree, df, datalist, lambda) {
   
   logtheta2 <- tensor(datalist$X[,1], datalist$X[,2], degree = degree, coef.vector = coef.vector, df = df, knots = datalist$knots)
   
-  L1 <- logLikC(riskset = t(datalist$riskset),
+  L1 <- logLikC(riskset = t(datalist$riskset), # LogLikC2 = asym, LogLikC = full
                 logtheta = t(logtheta2),
                 delta = t(datalist$delta.prod),
                 I1 = datalist$I1, I2 = datalist$I2, I3 = datalist$I5)
-  L2 <- logLikC(riskset = datalist$riskset,
-                logtheta = logtheta2,
-                delta = datalist$delta.prod,
-                I1 = t(datalist$I2), I2 = t(datalist$I1), I3 = datalist$I6)
+  L2 <- 0
+  # L2 <- logLikC(riskset = datalist$riskset,
+  #               logtheta = logtheta2,
+  #               delta = datalist$delta.prod,
+  #               I1 = t(datalist$I2), I2 = t(datalist$I1), I3 = datalist$I6)
   
-  Penalty1 <- lambda[1]*(t(coef.vector) %*% S1 %*% coef.vector)
-  Penalty2 <- lambda[2]*(t(coef.vector) %*% S2 %*% coef.vector)
+  Penalty <- t(coef.vector) %*% (lambda[1]*S1 + lambda[2]*S2) %*% coef.vector
   
-  return(-(L1+L2-Penalty1/2-Penalty2/2))
+  
+  return(L1+L2-Penalty/2)
 }
 
 
-gradient <- function(coef.vector, degree, df, datalist, lambda) {
+derivatives <- function(coef.vector, degree, datalist, S.lambda = NULL) {
+  
+  df <- length(coef.vector)
   
   # Tensor product spline
   logtheta2 <- tensor(datalist$X[,1], datalist$X[,2], degree = degree, coef.vector = coef.vector, df = df, knots = datalist$knots)
@@ -180,18 +185,32 @@ gradient <- function(coef.vector, degree, df, datalist, lambda) {
                  t1 = datalist$X[,1], t2 = datalist$X[,2], degree = degree, df = df, knots = datalist$knots,
                  simplify = FALSE)
   
-  gradient <- hessianC(riskset = datalist$riskset,
+  gradient <- gradientC(riskset = datalist$riskset,
                        logtheta = logtheta2,
                        df = df,
                        delta = datalist$delta.prod,
                        I1 = datalist$I1,
                        I2 = datalist$I2,
                        I3 = datalist$I5,
-                       I4 = datalist$I6) +
-    lambda[1]*t(coef.vector %*% S1) +
-    lambda[2]*t(coef.vector %*% S2)
+                       I4 = datalist$I6) # gradientC returns vector of derivatives of -loglik
   
-  return(-likelihood + penal)
+  hessian <- hessianC(riskset = t(datalist$riskset),
+             logtheta = t(logtheta2),
+             deriv = deriv,
+             df = df,
+             delta = t(datalist$delta.prod),
+             I1 = datalist$I1,
+             I2 = datalist$I2)
+  
+  if (is.null(S.lambda)) {
+    penalgrad <- penalhess <- 0
+  } else {
+    penalgrad <- t(coef.vector) %*% S.lamba
+    penalhess <- S.lambda
+  }
+  
+  
+  return(list(gradient = gradient, hessian = hessian))
 }
 
 hessian <- function(coef.vector, degree, df, datalist, lambda) {
@@ -260,46 +279,46 @@ hessian <- function(coef.vector, degree, df, datalist, lambda) {
 
 
 
-eval_function <- function(coef.vector, degree, df, datalist) {
+# eval_function <- function(coef.vector, degree, df, datalist) {
+# 
+#   logtheta2 <- tensor(datalist$X[,1], datalist$X[,2], degree = degree, coef.vector = coef.vector, df = df, knots = datalist$knots)
+#   logtheta.deriv <- tensor.deriv(datalist$X[,1], datalist$X[,2], degree = degree, df = df, knots = datalist$knots)
+#     
+#   U1 <- sum(diag(datalist$delta.prod)*diag(logtheta.deriv))
+#   U2 <- ScoreFunc(riskset = t(datalist$riskset),
+#                   logthetaderiv = t(logtheta.deriv),
+#                   logtheta = t(logtheta2),
+#                   delta = t(datalist$delta.prod),
+#                   I1 = datalist$I1,
+#                   I2 = datalist$I2)
+#   U4 <- ScoreFunc(riskset = datalist$riskset,
+#                   logthetaderiv = logtheta.deriv,
+#                   logtheta = logtheta2,
+#                   delta = datalist$delta.prod,
+#                   I1 = t(datalist$I1),
+#                   I2 = t(datalist$I2))
+#   
+#   return((2*U1 - U2 - U4)/nrow(datalist$X))
+#   
+# }
 
-  logtheta2 <- tensor(datalist$X[,1], datalist$X[,2], degree = degree, coef.vector = coef.vector, df = df, knots = datalist$knots)
-  logtheta.deriv <- tensor.deriv(datalist$X[,1], datalist$X[,2], degree = degree, df = df, knots = datalist$knots)
-    
-  U1 <- sum(diag(datalist$delta.prod)*diag(logtheta.deriv))
-  U2 <- ScoreFunc(riskset = t(datalist$riskset),
-                  logthetaderiv = t(logtheta.deriv),
-                  logtheta = t(logtheta2),
-                  delta = t(datalist$delta.prod),
-                  I1 = datalist$I1,
-                  I2 = datalist$I2)
-  U4 <- ScoreFunc(riskset = datalist$riskset,
-                  logthetaderiv = logtheta.deriv,
-                  logtheta = logtheta2,
-                  delta = datalist$delta.prod,
-                  I1 = t(datalist$I1),
-                  I2 = t(datalist$I2))
-  
-  return((2*U1 - U2 - U4)/nrow(datalist$X))
-  
-}
-
-loglik.poly <- function(coef.vector) {
-  
-  logtheta2 <- outer(X[,1], X[,2], function (x,y) polynomial(x,y, coef.vec = coef.vector))
-  logtheta1 <- t(logtheta2)
-  
-  B1 <- c(I5*logtheta1)[N1 > 0]
-  B2 <- c(I6*logtheta2)[N2 > 0]
-  
-  C1 <- c(N1 + I2*(exp(logtheta1)-1))[N1 > 0]
-  C2 <- c(N2 + I4*(exp(logtheta2)-1))[N2 > 0]
-  
-  
-  L1 <- sum(A1*(B1 - log(C1)))
-  L2 <- sum(A2*(B2 - log(C2)))
-  
-  return(-(L1+L2))
-}
+# loglik.poly <- function(coef.vector) {
+#   
+#   logtheta2 <- outer(X[,1], X[,2], function (x,y) polynomial(x,y, coef.vec = coef.vector))
+#   logtheta1 <- t(logtheta2)
+#   
+#   B1 <- c(I5*logtheta1)[N1 > 0]
+#   B2 <- c(I6*logtheta2)[N2 > 0]
+#   
+#   C1 <- c(N1 + I2*(exp(logtheta1)-1))[N1 > 0]
+#   C2 <- c(N2 + I4*(exp(logtheta2)-1))[N2 > 0]
+#   
+#   
+#   L1 <- sum(A1*(B1 - log(C1)))
+#   L2 <- sum(A2*(B2 - log(C2)))
+#   
+#   return(-(L1+L2))
+# }
 
 SimData <- function (K, df, degree, unif.ub) {
   set.seed(123)
