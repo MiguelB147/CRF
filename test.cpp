@@ -1,5 +1,6 @@
 #include <cmath>
 #include <Rcpp.h>
+
 using namespace Rcpp;
 
 // This is a simple example of exporting a C++ function to R. You can
@@ -457,6 +458,28 @@ NumericMatrix tensorC(const NumericMatrix spline1,
 //   return(matrix);
 //   
 // }
+
+// // [[Rcpp::export]]
+// arma::vec SimulateBeta(const int nsim,
+//                            arma::mat S) {
+//   
+//   int df = pow(S.n_rows,2);
+//   arma::vec lik(nsim);
+//   arma::mat Sinv(df,df);
+//   arma::vec beta(df);
+//   arma::vec mean = arma::zeros(df);
+//   
+//   Sinv = arma::pinv(S);
+//   
+//   for (int i=0; i<nsim; i++) {
+//     
+//     beta = arma::mvnrnd(mean, Sinv);
+// 
+//     
+//   }
+//   return(lik);
+// }
+
 
 
 
