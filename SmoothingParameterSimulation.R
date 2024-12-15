@@ -1,7 +1,7 @@
 library(splines)
 library(doParallel)
 library(Rcpp)
-library(MASS)
+library(mvtnorm)
 
 setwd("~/Library/CloudStorage/GoogleDrive-miguel-angel.beynaerts@student.uhasselt.be/Mijn Drive/CRF simulations")
 # setwd("H:/My Drive/CRF simulations")
@@ -24,29 +24,26 @@ lambda.grid <- expand.grid(Lambda1 = seq(0.1, 2, 0.1), Lambda2 = seq(0.1, 2, 0.1
 ll <- ll.avg <- c()
 betas <- matrix(0, ncol = df^2, nrow = nsim)
 lambda.opt <- matrix(0, nrow = nsets, ncol = 2)
-dat.list <- list()
 
-set.seed(123)
-for (k in 1:nsets) {
+ste.seed(123)
+dat.list <- SimData(K = K, df = df, degree = degree, unif.ub = unif.ub)
+
+S1 <- Srow(df)
+S2 <- Scol(df)
+
+for (i in 1:nrow(lambda.grid)) {
   
-  dat.list[[k]] <- SimData(K = K, df = df, degree = degree, unif.ub = unif.ub)
+  Sinv <- ginv(lambda.grid[i,1]*S1 + lambda.grid[i,2]*S2)
 
-  for (i in 1:nrow(lambda.grid)) {
-    
-    S.lambda <- ginv(lambda.grid[i,1]*Srow(df) + lambda.grid[i,2]*Scol(df))
-    betas <- mvrnorm(nsim, mu = rep(0,df^2), Sigma = S.lambda)
-    
-    for (j in 1:nsim) {
-      ll[j] <- as.integer(loglikPenal(coef.vector = betas[j,],
-                                      degree = degree,
-                                      df = df,
-                                      datalist = dat.list[[k]],
-                                      lambda = lambda.grid[i,]))
-    }
-    ll.avg[i] <- mean(ll)
+  for (j in 1:nsim) {
+    betas <- rmvnorm(nsim, sigma = S.lambda)
+    ll[j] <- as.numeric(loglikPenal(coef.vector = betas,
+                                    degree = degree,
+                                    df = df,
+                                    datalist = dat.list,
+                                    lambda = lambda.grid[i,]))
   }
-  
-  lambda.opt[k,] <- lambda.grid[which.min(ll.avg),]
+  ll.avg[i] <- mean(ll)
 }
 
 
