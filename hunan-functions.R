@@ -145,10 +145,7 @@ loglikCpp <- function(coef.vector, degree, df, datalist) {
 #   return(-L1 - L2)
 # }
 
-loglikPenal <- function(coef.vector, degree, df, datalist, lambda) {
-  
-  S1 <- Srow(df)
-  S2 <- Scol(df)
+loglikPenal <- function(coef.vector, degree, df, datalist, S) {
   
   logtheta2 <- tensor(datalist$X[,1], datalist$X[,2], degree = degree, coef.vector = coef.vector, df = df, knots = datalist$knots)
   
@@ -162,7 +159,7 @@ loglikPenal <- function(coef.vector, degree, df, datalist, lambda) {
   #               delta = datalist$delta.prod,
   #               I1 = t(datalist$I2), I2 = t(datalist$I1), I3 = datalist$I6)
   
-  Penalty <- t(coef.vector) %*% (lambda[1]*S1 + lambda[2]*S2) %*% coef.vector
+  Penalty <- t(coef.vector) %*% S %*% coef.vector
   
   
   return(L1+L2-Penalty/2)
@@ -357,9 +354,7 @@ SimData <- function (K, df, degree, unif.ub) {
   }
 
   
-  #########################################
-  ## Check whether first delta1=delta2=1 ##
-  #########################################
+  ## Check whether first delta1=delta2=1
   
   
   row_index <- which(delta1 == 1 & delta2 == 1 , arr.ind = TRUE)[1] # First observation with delta1=delta2=1
@@ -381,10 +376,8 @@ SimData <- function (K, df, degree, unif.ub) {
   } else {X <- X; delta <- delta}
   
   
-  ##############################
-  ## Calculating the risk set ##
-  ##############################
   
+  ## Calculating the risk set 
   
   # N <- outer(X[,1], X[,2], function(x,y) mapply(riskset,x,y))
   # N1 <- c(t(N))
@@ -393,9 +386,7 @@ SimData <- function (K, df, degree, unif.ub) {
   N <- risksetC(X[,1],X[,2])
   
   
-  ###################################################
-  ## Calculating indicator functions in likelihood ##
-  ###################################################
+  ## Calculating indicator functions in likelihood 
   
   #### I(X1j >= X1i)
   # I1 <- sapply(X[,1], function(x) 1*(X[,1] >= x)) # col=1,...,i,...,n row=1,...,j,...,n
@@ -595,7 +586,7 @@ wrapperTest <- function(coef.vector, degree, datalist, S.lambda=NULL, H = NULL, 
     # Calculate penalty terms for log f_lambda(y,beta) Wood (2017) p.1076 
     S.lambda.eigenv <- eigen(S.lambda)$values
     
-    penaltyLik <- (t(coef.vector) %*% S.lambda %*% coef.vector)/2
+    # penaltyLik <- (t(coef.vector) %*% S.lambda %*% coef.vector)/2
     logS.lambda <- log(prod(S.lambda.eigenv[S.lambda.eigenv > 0]))
     constant <- sum(S.lambda.eigenv == 0)*log(2*pi)/2 # Zie Wood (2016) p.1550
     
@@ -617,7 +608,7 @@ wrapperTest <- function(coef.vector, degree, datalist, S.lambda=NULL, H = NULL, 
   sign <- ifelse(isTRUE(minusLogLik), 1, -1)
   
   # log f_lambda(y,beta)
-  ll <- loglikAsym(coef.vector, degree, df, datalist) + penaltyLik - logS.lambda + logdetH - constant
+  ll <- loglikPenal(coef.vector, degree, df, datalist, S = S.lambda) - logS.lambda + logdetH - constant
   
   return(sign*ll)
   
@@ -926,7 +917,7 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
                     degree = degree,
                     S.lambda = S.lambda,
                     datalist = datalist,
-                    hessian = TRUE)
+                    hessian = FALSE)
     
     # New betas to be used as initial values for possible next iteration
     beta <- beta.fit$estimate
