@@ -533,13 +533,20 @@ wrapper <- function(coef.vector, degree, datalist, S.lambda=NULL, H = NULL, minu
   #                simplify = FALSE)
   
   # log f_lambda(y,beta)
+  # ll <- logLikC(riskset = datalist$riskset,
+  #               logtheta = logtheta2,
+  #               delta = datalist$delta.prod,
+  #               I1 = datalist$I1,
+  #               I2 = datalist$I2,
+  #               I3 = datalist$I5,
+  #               I4 = datalist$I6) + penaltyLik - logS.lambda + logdetH - constant
+  
   ll <- logLikC(riskset = datalist$riskset,
                 logtheta = logtheta2,
                 delta = datalist$delta.prod,
                 I1 = datalist$I1,
                 I2 = datalist$I2,
-                I3 = datalist$I5,
-                I4 = datalist$I6) + penaltyLik - logS.lambda + logdetH - constant
+                I3 = datalist$I5) + penaltyLik - logS.lambda + logdetH - constant
   
   
   # gradient <- gradientC(riskset = datalist$riskset,
@@ -890,29 +897,28 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
   df <- sqrt(ncol(S1))
   
   lambda.new <- lambda.init # In voorbeelden van Wood (2017) is de initiele lambda = 1
+  lambda <- 0
   
   lldiff <- 1e10
-  betadiff <- 1e10
   beta <- rep(1,df^2)
   
   iter <- 0
   
   if (iter == 0) {print("Algorithm running...")}
   
-  while (norm(betadiff, type = "2") > tol & iter <= maxiter) {
+  while (norm(lambda.new - lambda, type = "2") > tol & iter <= maxiter) {
     
     # Update number of iterations
     iter = iter + 1
     
     lambda <- lambda.new
-    beta.old <- beta
     
     # Some calculations to update lambda later...
     S.lambda <- lambda[1]*S1 + lambda[2]*S2
     S.lambda.inv <- MASS::ginv(S.lambda)
     
     # Estimate betas for given lambdas
-    beta.fit <- nlm(f = wrapperTest,
+    beta.fit <- nlm(f = wrapper,
                     p = beta,
                     degree = degree,
                     S.lambda = S.lambda,
@@ -922,7 +928,7 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
     # New betas to be used as initial values for possible next iteration
     beta <- beta.fit$estimate
     
-    # Make sure that observed hessian is positive definite
+    # # Make sure that observed hessian is positive definite
     decomp <- eigen(beta.fit$hessian)
     A <- diag(abs(decomp$values))
     hessian <- decomp$vectors %*% A %*% t(decomp$vectors)
@@ -942,7 +948,7 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
     
     # Assess whether update is an increase in the log-likelihood
     # If not, apply step length control
-    l1 <- wrapperTest(
+    l1 <- wrapper(
       coef.vector = beta,
       degree = degree,
       S.lambda = S.lambda.new,
@@ -951,7 +957,7 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
       datalist = datalist
     )
     
-    l0 <- wrapperTest(
+    l0 <- wrapper(
       coef.vector = beta,
       degree = degree,
       S.lambda = S.lambda,
@@ -971,29 +977,24 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
       
       S.lambda.delta <- (lambda + delta)[1]*S1 + (lambda + delta)[2]*S2
       
-      l1 <- wrapperTest(
-        coef.vector = beta,
-        degree = degree,
-        S.lambda = S.lambda.delta,
-        H = hessian + S.lambda.delta,
-        minusLogLik = FALSE,
-        datalist = datalist
-      )
+      l1 <- wrapper(coef.vector = beta,
+                    degree = degree,
+                    S.lambda = S.lambda.delta,
+                    H = hessian + S.lambda.delta,
+                    minusLogLik = FALSE,
+                    datalist = datalist)
       
-      l0 <- wrapperTest(
-        coef.vector = beta,
-        degree = degree,
-        S.lambda = S.lambda,
-        H = hessian + S.lambda,
-        minusLogLik = FALSE,
-        datalist = datalist
-      )
+      l0 <- wrapper(coef.vector = beta,
+                    degree = degree,
+                    S.lambda = S.lambda,
+                    H = hessian + S.lambda,
+                    minusLogLik = FALSE,
+                    datalist = datalist)
       
     } # end of inner while loop
     
     # Final difference in loglikelihood
     lldiff <- l1 - l0
-    betadiff <- beta - beta.old
     
     # If step length control is needed, set updated lambda according to new step length
     if (k > 0) {
@@ -1004,11 +1005,11 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
     if (sum(lambda.new < 0) > 0) {stop("At least 1 lambda is negative")}
     
     # Calculate loglikelihood for new lambda
-    loglik.new <- wrapperTest(coef.vector = beta,
-                              degree = degree,
-                              datalist = datalist,
-                              S.lambda = lambda.new[1]*S1 + lambda.new[2]*S2,
-                              minusLogLik=TRUE)
+    loglik.new <- wrapper(coef.vector = beta,
+                          degree = degree,
+                          datalist = datalist,
+                          S.lambda = lambda.new[1]*S1 + lambda.new[2]*S2,
+                          minusLogLik=TRUE)
     
     # Print information while running...
     print(paste0("Iteration ", iter,

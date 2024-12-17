@@ -1,4 +1,4 @@
-library(MASS)
+
 library(splines)
 library(Rcpp)
 library(doSNOW)
@@ -165,7 +165,7 @@ S <- list(Srow(df), Scol(df))
 
 fit <- EstimatePenalty(datalist = datalist, degree = degree, S = S, lambda.init = c(20,20))
 fit <- EstimatePenaltyNoControl(datalist = datalist, degree = degree, S = S, lambda.init = c(10,10))
-fit <- EstimatePenalAsym(datalist = datalist, degree = degree, S = S, lambda.init = c(50,50))
+fit <- EstimatePenalAsym(datalist = datalist, degree = degree, S = S, lambda.init = c(1,1))
 
 
 MatToVec <- function(Matrix) {
