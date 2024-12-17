@@ -167,7 +167,7 @@ loglikPenal <- function(coef.vector, degree, df, datalist, S = NULL) {
 
 derivatives <- function(coef.vector, degree, datalist, S.lambda = NULL, gradient = FALSE, hessian = TRUE) {
   
-  df <- length(coef.vector)
+  df <- sqrt(length(coef.vector))
   
   # Tensor product spline
   logtheta2 <- tensor(datalist$X[,1], datalist$X[,2], degree = degree, coef.vector = coef.vector, df = df, knots = datalist$knots)
@@ -882,7 +882,7 @@ EstimatePenaltyNoControl <- function(datalist, degree, S, lambda.init = c(1,1), 
 
 
 
-EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0.01, maxiter=50) {
+EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0.001, maxiter=50) {
   
   S1 <- S[[1]]
   S2 <- S[[2]]
@@ -892,22 +892,24 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
   lambda.new <- lambda.init # In voorbeelden van Wood (2017) is de initiele lambda = 1
   
   lldiff <- 1e10
+  betadiff <- 1e10
   beta <- rep(1,df^2)
   
   iter <- 0
   
   if (iter == 0) {print("Algorithm running...")}
   
-  while (lldiff > tol & iter <= maxiter) {
+  while (norm(betadiff, type = "2") > tol & iter <= maxiter) {
     
     # Update number of iterations
     iter = iter + 1
     
     lambda <- lambda.new
+    beta.old <- beta
     
     # Some calculations to update lambda later...
     S.lambda <- lambda[1]*S1 + lambda[2]*S2
-    S.lambda.inv <- ginv(S.lambda)
+    S.lambda.inv <- MASS::ginv(S.lambda)
     
     # Estimate betas for given lambdas
     beta.fit <- nlm(f = wrapperTest,
@@ -915,17 +917,17 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
                     degree = degree,
                     S.lambda = S.lambda,
                     datalist = datalist,
-                    hessian = FALSE)
+                    hessian = TRUE)
     
     # New betas to be used as initial values for possible next iteration
     beta <- beta.fit$estimate
     
     # Make sure that observed hessian is positive definite
-    # decomp <- eigen(beta.fit$hessian)
-    # A <- diag(abs(decomp$values))
-    # hessian.obs <- decomp$vectors %*% A %*% t(decomp$vectors)
+    decomp <- eigen(beta.fit$hessian)
+    A <- diag(abs(decomp$values))
+    hessian <- decomp$vectors %*% A %*% t(decomp$vectors)
     
-    hessian <- derivatives(coef.vector = beta, degree = degree, datalist = datalist)$hessian
+    # hessian <- derivatives(coef.vector = beta, degree = degree, datalist = datalist)$hessian
     
     V <- solve(hessian + S.lambda)
     
@@ -944,7 +946,7 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
       coef.vector = beta,
       degree = degree,
       S.lambda = S.lambda.new,
-      H = hessian.obs + S.lambda.new,
+      H = hessian + S.lambda.new,
       minusLogLik = FALSE,
       datalist = datalist
     )
@@ -953,7 +955,7 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
       coef.vector = beta,
       degree = degree,
       S.lambda = S.lambda,
-      H = hessian.obs + S.lambda,
+      H = hessian + S.lambda,
       minusLogLik = FALSE,
       datalist = datalist
     )
@@ -973,7 +975,7 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
         coef.vector = beta,
         degree = degree,
         S.lambda = S.lambda.delta,
-        H = hessian.obs + S.lambda.delta,
+        H = hessian + S.lambda.delta,
         minusLogLik = FALSE,
         datalist = datalist
       )
@@ -982,7 +984,7 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
         coef.vector = beta,
         degree = degree,
         S.lambda = S.lambda,
-        H = hessian.obs + S.lambda,
+        H = hessian + S.lambda,
         minusLogLik = FALSE,
         datalist = datalist
       )
@@ -991,6 +993,7 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
     
     # Final difference in loglikelihood
     lldiff <- l1 - l0
+    betadiff <- beta - beta.old
     
     # If step length control is needed, set updated lambda according to new step length
     if (k > 0) {

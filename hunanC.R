@@ -158,11 +158,14 @@ dev.off()
 
 # Fellner - Schall method ----
 
+source('hunan-functions.R')
+sourceCpp('test.cpp')
+
 S <- list(Srow(df), Scol(df))
 
 fit <- EstimatePenalty(datalist = datalist, degree = degree, S = S, lambda.init = c(20,20))
 fit <- EstimatePenaltyNoControl(datalist = datalist, degree = degree, S = S, lambda.init = c(10,10))
-fit <- EstimatePenalTest(datalist = datalist, degree = degree, S = S, lambda.init = c(1,1))
+fit <- EstimatePenalAsym(datalist = datalist, degree = degree, S = S, lambda.init = c(50,50))
 
 
 MatToVec <- function(Matrix) {
@@ -181,7 +184,3 @@ MatToVec <- function(Matrix) {
   
   return(vector)
 }
-
-test <- matrix(1:9, ncol = 3, byrow = F)
-
-
