@@ -145,7 +145,7 @@ loglikCpp <- function(coef.vector, degree, df, datalist) {
 #   return(-L1 - L2)
 # }
 
-loglikPenal <- function(coef.vector, degree, df, datalist, S) {
+loglikPenal <- function(coef.vector, degree, df, datalist, S = NULL) {
   
   logtheta2 <- tensor(datalist$X[,1], datalist$X[,2], degree = degree, coef.vector = coef.vector, df = df, knots = datalist$knots)
   
@@ -159,14 +159,13 @@ loglikPenal <- function(coef.vector, degree, df, datalist, S) {
   #               delta = datalist$delta.prod,
   #               I1 = t(datalist$I2), I2 = t(datalist$I1), I3 = datalist$I6)
   
-  Penalty <- t(coef.vector) %*% S %*% coef.vector
-  
+  if ( is.null(S)) {Penalty <- 0} else {Penalty <- t(coef.vector) %*% S %*% coef.vector}
   
   return(L1+L2-Penalty/2)
 }
 
 
-derivatives <- function(coef.vector, degree, datalist, S.lambda = NULL) {
+derivatives <- function(coef.vector, degree, datalist, S.lambda = NULL, gradient = FALSE, hessian = TRUE) {
   
   df <- length(coef.vector)
   
@@ -174,105 +173,104 @@ derivatives <- function(coef.vector, degree, datalist, S.lambda = NULL) {
   logtheta2 <- tensor(datalist$X[,1], datalist$X[,2], degree = degree, coef.vector = coef.vector, df = df, knots = datalist$knots)
   
   M <- diag(df^2)
-  S1 <- Srow(df)
-  S2 <- Scol(df)
   
   # List of gradient matrices for every spline coefficient
   deriv <- apply(M, 2, tensor,
                  t1 = datalist$X[,1], t2 = datalist$X[,2], degree = degree, df = df, knots = datalist$knots,
                  simplify = FALSE)
   
-  gradient <- gradientC(riskset = datalist$riskset,
-                       logtheta = logtheta2,
-                       df = df,
-                       delta = datalist$delta.prod,
-                       I1 = datalist$I1,
-                       I2 = datalist$I2,
-                       I3 = datalist$I5,
-                       I4 = datalist$I6) # gradientC returns vector of derivatives of -loglik
-  
-  hessian <- hessianC(riskset = t(datalist$riskset),
-             logtheta = t(logtheta2),
-             deriv = deriv,
-             df = df,
-             delta = t(datalist$delta.prod),
-             I1 = datalist$I1,
-             I2 = datalist$I2)
-  
-  if (is.null(S.lambda)) {
-    penalgrad <- penalhess <- 0
-  } else {
-    penalgrad <- t(coef.vector) %*% S.lamba
-    penalhess <- S.lambda
-  }
+  if (isTRUE(gradient)) {
+    
+    gradient <- gradientC(riskset = datalist$riskset,
+                          logtheta = logtheta2,
+                          df = df,
+                          delta = datalist$delta.prod,
+                          I1 = datalist$I1,
+                          I2 = datalist$I2,
+                          I3 = datalist$I5,
+                          I4 = datalist$I6) # gradientC returns vector of derivatives of -loglik
+    
+  } else {gradient <- NA}
+
+  if (isTRUE(hessian)) {
+    
+    hessian <- hessianC(riskset = t(datalist$riskset),
+                        logtheta = t(logtheta2),
+                        deriv = deriv,
+                        df = df,
+                        delta = t(datalist$delta.prod),
+                        I1 = datalist$I1,
+                        I2 = datalist$I2) # hessianC returns matrix of second derivatives of -loglik
+    
+  } else {hessian <- NA}
   
   
   return(list(gradient = gradient, hessian = hessian))
 }
 
-hessian <- function(coef.vector, degree, df, datalist, lambda) {
-  
-  logtheta2 <- tensor(datalist$X[, 1], datalist$X[, 2], degree = degree, coef.vector = coef.vector, df = df, knots = datalist$knots)
-  
-  M <- diag(df^2)
-  S1 <- Srow(df)
-  S2 <- Scol(df)
-  
-  # List of (df) matrices B_k (t1) * B_l (t2) which is the derivative of log(theta) wrt coefficient beta_jk. 
-  deriv <- apply(M, 2, tensor,
-    t1 = datalist$X[,1],
-    t2 = datalist$X[,2],
-    degree = degree,
-    df = df,
-    knots = datalist$knots,
-    simplify = FALSE
-  )
-  
-  index.offdiag <- combn(1:df^2, 2)
-  index.ondiag <- 1:df
-  
-  H.offdiag <- apply(index.offdiag, MARGIN = 2, function (x) {
-    hessianC(riskset = t(datalist$riskset),
-             logtheta = t(logtheta2),
-             deriv1 = deriv[[x[1]]],
-             deriv2 = deriv[[x[2]]],
-             delta = t(datalist$delta.prod),
-             I1 = datalist$I1,
-             I2 = datalist$I2) + 
-      hessianC(riskset = datalist$riskset,
-               logtheta = logtheta2,
-               deriv1 = deriv[[x[1]]],
-               deriv2 = deriv[[x[2]]],
-               delta = datalist$delta.prod,
-               I1 = t(datalist$I2),
-               I2 = t(datalist$I1))
-      
-  })
-  
-  H.ondiag <- apply(array(1:df^2), 1,  function (x) {
-    hessianC(riskset = t(datalist$riskset),
-             logtheta = t(logtheta2),
-             deriv1 = deriv[[x]],
-             deriv2 = deriv[[x]],
-             delta = t(datalist$delta.prod),
-             I1 = datalist$I1,
-             I2 = datalist$I2) + 
-      hessianC(riskset = datalist$riskset,
-               logtheta = logtheta2,
-               deriv1 = deriv[[x]],
-               deriv2 = deriv[[x]],
-               delta = datalist$delta.prod,
-               I1 = t(datalist$I2),
-               I2 = t(datalist$I1))
-    
-  })
-  
-  H <- matrix(0, ncol = df^2, nrow = df^2)
-  diag(H) <- H.ondiag
-  H[index.offdiag[1,], index.offdiag[2,]] <- H[index.offdiag[2,], index.offdiag[1,]] <- H.offdiag
-
-  return(-H + lambda[1]*S1 + lambda[2]*S2)
-}
+# hessian <- function(coef.vector, degree, df, datalist, lambda) {
+#   
+#   logtheta2 <- tensor(datalist$X[, 1], datalist$X[, 2], degree = degree, coef.vector = coef.vector, df = df, knots = datalist$knots)
+#   
+#   M <- diag(df^2)
+#   S1 <- Srow(df)
+#   S2 <- Scol(df)
+#   
+#   # List of (df) matrices B_k (t1) * B_l (t2) which is the derivative of log(theta) wrt coefficient beta_jk. 
+#   deriv <- apply(M, 2, tensor,
+#     t1 = datalist$X[,1],
+#     t2 = datalist$X[,2],
+#     degree = degree,
+#     df = df,
+#     knots = datalist$knots,
+#     simplify = FALSE
+#   )
+#   
+#   index.offdiag <- combn(1:df^2, 2)
+#   index.ondiag <- 1:df
+#   
+#   H.offdiag <- apply(index.offdiag, MARGIN = 2, function (x) {
+#     hessianC(riskset = t(datalist$riskset),
+#              logtheta = t(logtheta2),
+#              deriv1 = deriv[[x[1]]],
+#              deriv2 = deriv[[x[2]]],
+#              delta = t(datalist$delta.prod),
+#              I1 = datalist$I1,
+#              I2 = datalist$I2) + 
+#       hessianC(riskset = datalist$riskset,
+#                logtheta = logtheta2,
+#                deriv1 = deriv[[x[1]]],
+#                deriv2 = deriv[[x[2]]],
+#                delta = datalist$delta.prod,
+#                I1 = t(datalist$I2),
+#                I2 = t(datalist$I1))
+#       
+#   })
+#   
+#   H.ondiag <- apply(array(1:df^2), 1,  function (x) {
+#     hessianC(riskset = t(datalist$riskset),
+#              logtheta = t(logtheta2),
+#              deriv1 = deriv[[x]],
+#              deriv2 = deriv[[x]],
+#              delta = t(datalist$delta.prod),
+#              I1 = datalist$I1,
+#              I2 = datalist$I2) + 
+#       hessianC(riskset = datalist$riskset,
+#                logtheta = logtheta2,
+#                deriv1 = deriv[[x]],
+#                deriv2 = deriv[[x]],
+#                delta = datalist$delta.prod,
+#                I1 = t(datalist$I2),
+#                I2 = t(datalist$I1))
+#     
+#   })
+#   
+#   H <- matrix(0, ncol = df^2, nrow = df^2)
+#   diag(H) <- H.ondiag
+#   H[index.offdiag[1,], index.offdiag[2,]] <- H[index.offdiag[2,], index.offdiag[1,]] <- H.offdiag
+# 
+#   return(-H + lambda[1]*S1 + lambda[2]*S2)
+# }
 
 
 
@@ -923,11 +921,13 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
     beta <- beta.fit$estimate
     
     # Make sure that observed hessian is positive definite
-    decomp <- eigen(beta.fit$hessian)
-    A <- diag(abs(decomp$values))
-    hessian.obs <- decomp$vectors %*% A %*% t(decomp$vectors)
+    # decomp <- eigen(beta.fit$hessian)
+    # A <- diag(abs(decomp$values))
+    # hessian.obs <- decomp$vectors %*% A %*% t(decomp$vectors)
     
-    V <- solve(hessian.obs + S.lambda)
+    hessian <- derivatives(coef.vector = beta, degree = degree, datalist = datalist)$hessian
+    
+    V <- solve(hessian + S.lambda)
     
     # Update lambdas
     lambda.new <- lambdaUpdate(lambda, S.lambda.inv, S, V, beta)

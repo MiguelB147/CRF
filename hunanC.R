@@ -7,6 +7,8 @@ library(doSNOW)
 source('hunan-functions.R')
 sourceCpp('test.cpp')
 
+# Simulation ----
+
 cl <- makeCluster(detectCores()-1)
 registerDoSNOW(cl)
 
@@ -73,12 +75,6 @@ fit <- nlm(f = wrapper,
 #                control = list(maxit = 10000))
 
 
-S <- list(Srow(df), Scol(df))
-
-fit <- EstimatePenalty(datalist = datalist, degree = degree, S = S, lambda.init = c(20,20))
-fit <- EstimatePenaltyNoControl(datalist = datalist, degree = degree, S = S, lambda.init = c(10,10))
-fit <- EstimatePenalTest(datalist = datalist, degree = degree, S = S, lambda.init = c(1,1))
-
 A.hat <- matrix(fit$estimate, ncol = df, byrow = FALSE)
 CRF <- mapply(function(x,y) exp(tensor(x,y, coef.matrix = A.hat,
                                        degree = degree, df = df, knots = cbind(knots1,knots2))),
@@ -105,9 +101,9 @@ plot.grid$poly.median.lb <- plot.grid$poly.median - plot.grid$poly.se
 
 
 
-###########################
-## Pointwise tensor plot ##
-###########################
+
+## Pointwise tensor plot ----
+
 
 # pdf(file = "/Users/miguel/Documents/CRF code/Spline fit/K400/3 internal knots - degree 2/pointwisemedian.pdf")
 
@@ -135,9 +131,8 @@ par(mfrow = c(1,1))
 dev.off()
 
 
-#####################
-## Polynomial plot ##
-#####################
+
+## Polynomial plot ----
 
 pdf(file = "/Users/miguel/Documents/CRF code/Polynomial fit/K1000/pointwise500.pdf")
 pdf("H:/My Drive/CRF simulations/Polynomial/Run200K1000cens20.pdf")
@@ -161,7 +156,13 @@ dev.off()
 
 
 
+# Fellner - Schall method ----
 
+S <- list(Srow(df), Scol(df))
+
+fit <- EstimatePenalty(datalist = datalist, degree = degree, S = S, lambda.init = c(20,20))
+fit <- EstimatePenaltyNoControl(datalist = datalist, degree = degree, S = S, lambda.init = c(10,10))
+fit <- EstimatePenalTest(datalist = datalist, degree = degree, S = S, lambda.init = c(1,1))
 
 
 MatToVec <- function(Matrix) {
