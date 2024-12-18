@@ -250,7 +250,8 @@ NumericMatrix hessianC(const NumericMatrix riskset,
                        const int df,
                        const NumericMatrix delta,
                        const NumericMatrix I1,
-                       const NumericMatrix I2) {
+                       const NumericMatrix I2,
+                       const NumericMatrix I3) {
   
   int n = riskset.nrow();
   int totalparam = df*df;
@@ -266,25 +267,46 @@ NumericMatrix hessianC(const NumericMatrix riskset,
     deriv_vec[k] = deriv_R;
   }
   
-  /* Calculate upper triangle + diagonal of hessian */
+  /* Calculate upper triangle of hessian */
   for (int m = 0; m < totalparam; m++) {
-    for (int l = m; l < totalparam; l++) {
+    for (int l = m+1; l < totalparam; l++) {
       
       double sum1 = 0;
       
       for (int i=0; i<n; i++) {
         for (int j=0; j<n; j++) {
           if (riskset(j,i) > 0) {
-            sum1 = sum1 -
+            sum1 = sum1 +
               delta(j,i)*I1(i,j)*deriv_vec[m](j,i)*deriv_vec[l](j,i)*(riskset(j,i) - I2(i,j))*I2(i,j)*(std::exp(logtheta(j,i)))/pow(riskset(j,i) - I2(i,j) + I2(i,j)*(std::exp(logtheta(j,i))),2);
           } else {sum1 = sum1 + 0;}
         } 
       }
       
-      result(m,l) = -sum1;
+      result(m,l) = sum1;
       result(l,m) = result(m,l); /* Symmetric hessian: upper triangle = lower triangle */
       
     }
+  }
+  
+  /* Calculate diagonal */
+  for (int k=0; k<totalparam; k++) {
+    
+    double sum2 = 0;
+    
+    for (int i=0; i<n; i++) {
+      for (int j=0; j<n; j++) {
+        if (riskset(j,i) > 0) {
+          sum2 = sum2 +
+            delta(j,i)*I1(i,j)*(
+                -I3(i,j) + 
+                I2(i,j)*std::exp(logtheta(j,i))*
+                ((1 + pow(deriv_vec[k](j,i),2))*(riskset(j,i) - I2(i,j)) + I2(i,j)*std::exp(logtheta(j,i)))/pow(riskset(j,i) - I2(i,j) + I2(i,j)*(std::exp(logtheta(j,i))),2)
+                );
+        } else {sum2 = sum2 + 0;}
+      } 
+    }
+    
+    result(k,k) = sum2;
   }
   
   return(result); /* Return second derivative of -loglik */
