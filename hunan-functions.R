@@ -657,7 +657,6 @@ EstimatePenalty <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0.0
   
   if (iter == 0) {print("Algorithm running...")}
   
-  # TODO norm(diff, type = "2") is duidelijk geen goed stopping criterium. Probeer misschien via l1-l0?
   while (lldiff > tol & iter <= maxiter) {
     
     # Update number of iterations
@@ -945,7 +944,8 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
     }
     
     # Update lambdas
-    lambda.new <- pmax(tiny, trSSj - trVS)/pmax(tiny, bSb) #lambda.new <- lambdaUpdate(lambda, S.lambda.inv, S, V, beta)
+    update <- pmax(tiny, trSSj - trVS)/pmax(tiny, bSb) #lambda.new <- lambdaUpdate(lambda, S.lambda.inv, S, V, beta)
+    lambda.new <- update*lambda # TODO Verander dit naar pmin(update*lambda, lambda.max)
     
     # Create new S.lambda matrix
     S.lambda.new <- lambda.new[1]*S1 + lambda.new[2]*S2
@@ -959,7 +959,7 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
       coef.vector = beta,
       degree = degree,
       S.lambda = S.lambda.new,
-      H = hessian + S.lambda.new,
+      H = hessian + S.lambda, # Denk dat dit hessian + S.lambda moet zijn ipv hessian + S.lambda.new
       minusLogLik = FALSE,
       datalist = datalist
     )
@@ -973,10 +973,22 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
       datalist = datalist
     )
     
-    # Step length control to guarantee increase in loglik
-    k = 0
+    # TODO Werk hier verder
+
+    k = 1 # Step length
     
-    while (l1 < l0) { 
+    if (l1 >= l0) { # Improvement
+      if(max.step < .05) { # Consider step extension
+        lambda2 <- pmin(update*lambda*k*2, exp(12))
+        l3 <- wrapper(
+          coef.vector = beta,
+          degree = degree,
+          S.lambda = S.lambda.new,
+          H = hessian + S.lambda, # Denk dat dit hessian + S.lambda moet zijn ipv hessian + S.lambda.new
+          minusLogLik = FALSE,
+          datalist = datalist
+        )
+      }
       
       k = k + 1
       
