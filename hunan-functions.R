@@ -889,7 +889,9 @@ EstimatePenaltyNoControl <- function(datalist, degree, S, lambda.init = c(1,1), 
 
 
 
-EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0.001, maxiter=50) {
+EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0.001) {
+  
+  tiny <- .Machine$double.eps^0.5
   
   S1 <- S[[1]]
   S2 <- S[[2]]
@@ -902,14 +904,11 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
   lldiff <- 1e10
   beta <- rep(1,df^2)
   
-  iter <- 0
+  print("Algorithm running...")
   
-  if (iter == 0) {print("Algorithm running...")}
-  
-  while (norm(lambda.new - lambda, type = "2") > tol & iter <= maxiter) {
+  for (iter in 1:200) {
     
     # Update number of iterations
-    iter = iter + 1
     
     lambda <- lambda.new
     
@@ -923,28 +922,36 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
                     degree = degree,
                     S.lambda = S.lambda,
                     datalist = datalist,
-                    hessian = TRUE)
+                    hessian = FALSE)
     
     # New betas to be used as initial values for possible next iteration
     beta <- beta.fit$estimate
     
-    # # Make sure that observed hessian is positive definite
+    # Make sure that hessian is positive definite
+    hessian <- derivatives(coef.vector = beta, degree = degree, datalist = datalist)$hessian
     decomp <- eigen(beta.fit$hessian)
     A <- diag(abs(decomp$values))
     hessian <- decomp$vectors %*% A %*% t(decomp$vectors)
     
-    # hessian <- derivatives(coef.vector = beta, degree = degree, datalist = datalist)$hessian
-    
+    # Calculate V
     V <- solve(hessian + S.lambda)
     
+    # Calculate trSSj, trVS and bSb
+    trSSj <- trVS <- bSb <- c()
+    for (i in length(S)) {
+      trSSj[i] <- sum(diag(S.lambda.inv %*% S[[i]]))
+      trVS[i] <- sum(diag(V %*% S[[i]]))
+      bSb[i] <- t(beta) %*% S[[i]] %*% beta
+    }
+    
     # Update lambdas
-    lambda.new <- lambdaUpdate(lambda, S.lambda.inv, S, V, beta)
+    lambda.new <- pmax(tiny, trSSj - trVS)/pmax(tiny, bSb) #lambda.new <- lambdaUpdate(lambda, S.lambda.inv, S, V, beta)
     
     # Create new S.lambda matrix
     S.lambda.new <- lambda.new[1]*S1 + lambda.new[2]*S2
     
     # Step length of update
-    diff <- lambda.new - lambda
+    max.step <- max(abs(lambda.new - lambda))
     
     # Assess whether update is an increase in the log-likelihood
     # If not, apply step length control
