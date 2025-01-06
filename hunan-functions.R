@@ -979,7 +979,7 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
     k = 1 # Step length
     
     if (l1 >= l0) { # Improvement
-      if(max.step < .05) { # Consider step extension
+      if(max.step < 1.5) { # Consider step extension
         lambda2 <- pmin(update*lambda*k*2, exp(12))
         l3 <- wrapper(
           coef.vector = beta,
