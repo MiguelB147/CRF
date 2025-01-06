@@ -888,7 +888,7 @@ EstimatePenaltyNoControl <- function(datalist, degree, S, lambda.init = c(1,1), 
 
 
 
-EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0.001) {
+EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0.001, lambda.max = exp(15)) {
   
   tiny <- .Machine$double.eps^0.5
   
@@ -945,7 +945,8 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
     
     # Update lambdas
     update <- pmax(tiny, trSSj - trVS)/pmax(tiny, bSb) #lambda.new <- lambdaUpdate(lambda, S.lambda.inv, S, V, beta)
-    lambda.new <- update*lambda # TODO Verander dit naar pmin(update*lambda, lambda.max)
+    update[!is.finite(update)] <- 1e6
+    lambda.new <- pmin(update*lambda, lambda.max) 
     
     # Create new S.lambda matrix
     S.lambda.new <- lambda.new[1]*S1 + lambda.new[2]*S2
