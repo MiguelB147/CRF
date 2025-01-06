@@ -954,6 +954,7 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
     # Step length of update
     max.step <- max(abs(lambda.new - lambda))
     
+    # TODO Bij Wood wordt nieuwe lambda en oude Sl gebruikt. Hoe doen we dit in deze context?
     # Assess whether update is an increase in the log-likelihood
     # If not, apply step length control
     l1 <- wrapper(
