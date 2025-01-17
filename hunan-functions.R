@@ -145,7 +145,7 @@ loglikCpp <- function(coef.vector, degree, df, datalist) {
 #   return(-L1 - L2)
 # }
 
-loglikPenal <- function(coef.vector, degree, df, datalist, S = NULL) {
+loglikPenal <- function(coef.vector, degree, df, datalist, lambda = c(0,0), S = NULL) {
   
   logtheta2 <- tensor(datalist$X[,1], datalist$X[,2], degree = degree, coef.vector = coef.vector, df = df, knots = datalist$knots)
   
@@ -159,7 +159,11 @@ loglikPenal <- function(coef.vector, degree, df, datalist, S = NULL) {
   #               delta = datalist$delta.prod,
   #               I1 = t(datalist$I2), I2 = t(datalist$I1), I3 = datalist$I6)
   
-  if ( is.null(S)) {Penalty <- 0} else {Penalty <- t(coef.vector) %*% S %*% coef.vector}
+  
+  if ( is.null(S)) {Penalty <- 0} else {
+    Sl <- lambda[1]*S[[1]] + lambda[2]*S[[2]]
+    Penalty <- t(coef.vector) %*% Sl %*% coef.vector
+    }
   
   return(L1+L2-Penalty/2)
 }
@@ -496,19 +500,21 @@ lambdaUpdate <- function(lambda.old, S.lambda.inv, S, V, beta) {
   
 }
 
-wrapper <- function(coef.vector, degree, datalist, S.lambda=NULL, H = NULL, minusLogLik=TRUE) {
+wrapper <- function(coef.vector, degree, datalist, lambda = c(1,1), S = NULL, H = NULL, minusLogLik=TRUE) {
   
   # Check whether penalty is applied
-  if (is.null(S.lambda)) {
+  if (is.null(S)) {
     penaltyLik <- penaltyGrad <- penaltyHess <- 0
   } else {
     
+    Sl <- lambda[1]*S[[1]] + lambda[2]*S[[2]]
+
     # Calculate penalty terms for log f_lambda(y,beta) Wood (2017) p.1076 
-    S.lambda.eigenv <- eigen(S.lambda)$values
+    Sl.eigenv <- eigen(Sl)$values
     
-    penaltyLik <- (t(coef.vector) %*% S.lambda %*% coef.vector)/2
-    logS.lambda <- log(prod(S.lambda.eigenv[S.lambda.eigenv > 0]))
-    constant <- sum(S.lambda.eigenv == 0)*log(2*pi)/2 # Zie Wood (2016) p.1550
+    penaltyLik <- (t(coef.vector) %*% Sl %*% coef.vector)/2
+    logSl <- log(prod(Sl.eigenv[Sl.eigenv > 0]))
+    constant <- sum(Sl.eigenv == 0)*log(2*pi)/2 # Zie Wood (2016) p.1550
     
     # penaltyGrad <- t(t(coef.vector) %*% S.lambda)
     # penaltyHess <- S.lambda
@@ -519,7 +525,7 @@ wrapper <- function(coef.vector, degree, datalist, S.lambda=NULL, H = NULL, minu
     logdetH <- 0
   } else {
     logdetH <- log(det(H))
-    logS.lambda <- logS.lambda/2
+    logSl <- logSl/2
   }
   
   df <- sqrt(length(coef.vector))
@@ -581,22 +587,24 @@ wrapper <- function(coef.vector, degree, datalist, S.lambda=NULL, H = NULL, minu
 
 # FIXME Waarom werkt minusLogLik niet?? Final loglik in estimatepenaltest geeft negatieve waarde
 # FIXME penaltyLik = 0 !!!!!! Probleem met S
-wrapperTest <- function(coef.vector, degree, datalist, S.lambda=NULL, H = NULL, minusLogLik=TRUE) {
+wrapperTest <- function(coef.vector, degree, datalist, lambda, S=NULL, H = NULL, minusLogLik=TRUE) {
   
   # Check whether penalty is applied
-  if (is.null(S.lambda)) {
+  if (is.null(S)) {
     penaltyLik <- penaltyGrad <- penaltyHess <- 0
   } else {
     
+    Sl <- lambda[1]*S[[1]] + lambda[2]*S[[2]]
+    
     # Calculate penalty terms for log f_lambda(y,beta) Wood (2017) p.1076 
-    S.lambda.eigenv <- eigen(S.lambda)$values
+    Sl.eigenv <- eigen(Sl)$values
     
-    # penaltyLik <- (t(coef.vector) %*% S.lambda %*% coef.vector)/2
-    logS.lambda <- log(prod(S.lambda.eigenv[S.lambda.eigenv > 0]))
-    constant <- sum(S.lambda.eigenv == 0)*log(2*pi)/2 # Zie Wood (2016) p.1550
+    # penaltyLik <- (t(coef.vector) %*% Sl %*% coef.vector)/2
+    logSl <- log(prod(Sl.eigenv[Sl.eigenv > 0]))
+    constant <- sum(Sl.eigenv == 0)*log(2*pi)/2 # Zie Wood (2016) p.1550
     
-    # penaltyGrad <- t(t(coef.vector) %*% S.lambda)
-    # penaltyHess <- S.lambda
+    # penaltyGrad <- t(t(coef.vector) %*% Sl)
+    # penaltyHess <- Sl
   }
   
   # TODO implement sanity check that !is.null(S.lambda) & !is.null(H) & minusLogLik=FALSE implies laplace likelihood
@@ -604,7 +612,7 @@ wrapperTest <- function(coef.vector, degree, datalist, S.lambda=NULL, H = NULL, 
     logdetH <- 0
   } else {
     logdetH <- log(det(H))
-    logS.lambda <- logS.lambda/2
+    logSl <- logSl/2
   }
   
   df <- sqrt(length(coef.vector))
@@ -613,7 +621,7 @@ wrapperTest <- function(coef.vector, degree, datalist, S.lambda=NULL, H = NULL, 
   sign <- ifelse(isTRUE(minusLogLik), 1, -1)
   
   # log f_lambda(y,beta)
-  ll <- loglikPenal(coef.vector, degree, df, datalist, S = S.lambda) - logS.lambda + logdetH - constant
+  ll <- loglikPenal(coef.vector, degree, df, datalist, S = Sl) - logSl + logdetH - constant
   
   return(sign*ll)
   
@@ -905,6 +913,7 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
   
   print("Algorithm running...")
   
+  score <- c()
   for (iter in 1:200) {
     
     # Update number of iterations
@@ -912,14 +921,15 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
     lambda <- lambda.new
     
     # Some calculations to update lambda later...
-    S.lambda <- lambda[1]*S1 + lambda[2]*S2
-    S.lambda.inv <- MASS::ginv(S.lambda)
+    Sl <- lambda[1]*S1 + lambda[2]*S2
+    Sl.inv <- MASS::ginv(Sl)
     
     # Estimate betas for given lambdas
     beta.fit <- nlm(f = wrapper,
                     p = beta,
                     degree = degree,
-                    S.lambda = S.lambda,
+                    lambda = lambda,
+                    S = S,
                     datalist = datalist,
                     hessian = FALSE)
     
@@ -933,12 +943,12 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
     hessian <- decomp$vectors %*% A %*% t(decomp$vectors)
     
     # Calculate V
-    V <- solve(hessian + S.lambda)
+    V <- solve(hessian + Sl)
     
     # Calculate trSSj, trVS and bSb
     trSSj <- trVS <- bSb <- c()
     for (i in length(S)) {
-      trSSj[i] <- sum(diag(S.lambda.inv %*% S[[i]]))
+      trSSj[i] <- sum(diag(Sl.inv %*% S[[i]]))
       trVS[i] <- sum(diag(V %*% S[[i]]))
       bSb[i] <- t(beta) %*% S[[i]] %*% beta
     }
@@ -949,7 +959,7 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
     lambda.new <- pmin(update*lambda, lambda.max) 
     
     # Create new S.lambda matrix
-    S.lambda.new <- lambda.new[1]*S1 + lambda.new[2]*S2
+    Sl.new <- lambda.new[1]*S1 + lambda.new[2]*S2
     
     # Step length of update
     max.step <- max(abs(lambda.new - lambda))
@@ -960,70 +970,51 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
     l1 <- wrapper(
       coef.vector = beta,
       degree = degree,
-      S.lambda = S.lambda.new,
+      lambda = lambda.new,
+      S = S, # TODO Na te gaan of dit oude Sl moet zijn
       H = hessian + S.lambda, # Denk dat dit hessian + S.lambda moet zijn ipv hessian + S.lambda.new
       minusLogLik = FALSE,
       datalist = datalist
     )
     
-    l0 <- wrapper(
-      coef.vector = beta,
-      degree = degree,
-      S.lambda = S.lambda,
-      H = hessian + S.lambda,
-      minusLogLik = FALSE,
-      datalist = datalist
-    )
-    
-    # TODO Werk hier verder
+    l0 <- wrapper(coef.vector = beta ,degree = degree, lambda = lambda, S = S, H = hessian + Sl, minusLogLik = FALSE, datalist = datalist)
 
     k = 1 # Step length
     
     if (l1 >= l0) { # Improvement
       if(max.step < 1.5) { # Consider step extension
-        lambda2 <- pmin(update*lambda*k*2, exp(12))
-        l3 <- wrapper(
-          coef.vector = beta,
-          degree = degree,
-          S.lambda = S.lambda.new,
-          H = hessian + S.lambda, # Denk dat dit hessian + S.lambda moet zijn ipv hessian + S.lambda.new
+        lambda2 <- pmin(update*lambda*k*7, exp(12))
+        l3 <- wrapper(coef.vector = beta, degree = degree, lambda = lambda2, S = S,
+          H = hessian + Sl, # Denk dat dit hessian + S.lambda moet zijn ipv hessian + S.lambda.new
           minusLogLik = FALSE,
           datalist = datalist
         )
+      } if (l3 > l1) { # Improvement - accept extension
+        lambda.new <- lambda2
+      } else lambda.new <- lambda.new # Accept old step
+    } else { # No improvement
+        while (l1 < l0) {
+          k <- k/2 ## Contract step
+          lambda3 <- pmin(update*lambda*k*7, lambda.max)
+          l1 <- wrapper(coef.vector = beta, degree = degree, lambda = lambda3, S = S, H = hessian + Sl, minusLogLik = FALSE, datalist = datalist)
+        }
       }
       
-      k = k + 1
-      
-      delta <- diff/(2^k)
-      
-      S.lambda.delta <- (lambda + delta)[1]*S1 + (lambda + delta)[2]*S2
-      
-      l1 <- wrapper(coef.vector = beta,
-                    degree = degree,
-                    S.lambda = S.lambda.delta,
-                    H = hessian + S.lambda.delta,
-                    minusLogLik = FALSE,
-                    datalist = datalist)
-      
-      l0 <- wrapper(coef.vector = beta,
-                    degree = degree,
-                    S.lambda = S.lambda,
-                    H = hessian + S.lambda,
-                    minusLogLik = FALSE,
-                    datalist = datalist)
-      
-    } # end of inner while loop
-    
-    # Final difference in loglikelihood
-    lldiff <- l1 - l0
-    
-    # If step length control is needed, set updated lambda according to new step length
-    if (k > 0) {
-      lambda.new <- lambda + delta
-    }
+    # If step length control is needed, update lambda accordingly
+    if(k < 1) {
+      lambda.new <- lambda3
+      max.step <- max(abs(lambda.new - lambda))}
+
+    #save loglikelihood value
+    score[iter] <- l1
     
     # Sanity check: lambda must be positive
     if (sum(lambda.new < 0) > 0) {stop("At least 1 lambda is negative")}
+    
+    # Break procedure if REML change and step size are too small
+    if (iter>3 && max.step<1 && max(abs(diff(score[(iter-3):iter])))<control$efs.tol) break
+    # Or break is likelihood does not change
+    if (l1 == l0) break
     
     # Calculate loglikelihood for new lambda
     loglik.new <- wrapper(coef.vector = beta,
@@ -1037,14 +1028,11 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
                  ": k = ", k,
                  " lambda1 = ", lambda.new[1],
                  " lambda2 = ", lambda.new[2],
-                 " Likelihood increase = ", lldiff,
-                 " Final -loglik = ", loglik.new))
+                 " Score increase = ", score[iter] - score[iter-1],
+                 " REML = ", score[iter]))
     
   } # end of outer while loop
   
-  
-  
-  if (iter == maxiter) {message <- "Maximum iterations reached"} else {message <- "Convergence reached"}
   
   return(list(
     beta = beta,
