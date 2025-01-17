@@ -916,8 +916,6 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
   score <- c()
   for (iter in 1:200) {
     
-    # Update number of iterations
-    
     lambda <- lambda.new
     
     # Some calculations to update lambda later...
@@ -1039,6 +1037,6 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
     lambda = lambda.new,
     iterations = iter,
     status = message,
-    loglik = loglik.new))
+    history = score))
 }
 
