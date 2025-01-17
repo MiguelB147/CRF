@@ -894,9 +894,9 @@ EstimatePenaltyNoControl <- function(datalist, degree, S, lambda.init = c(1,1), 
     status = message))
 }
 
-
-
-EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0.001, lambda.max = exp(15)) {
+# EFS gebaseerd op de code van Simon Wood in het mgcv package (zie gam.fit4.r op github)
+# gam.control() details in mgcv.r op github
+EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0.001, lambda.max = exp(15)) { 
   
   tiny <- .Machine$double.eps^0.5
   
@@ -1010,7 +1010,7 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
     if (sum(lambda.new < 0) > 0) {stop("At least 1 lambda is negative")}
     
     # Break procedure if REML change and step size are too small
-    if (iter>3 && max.step<1 && max(abs(diff(score[(iter-3):iter])))<control$efs.tol) break
+    if (iter > 3 && max.step < 1 && max(abs(diff(score[(iter-3):iter]))) < .1) break
     # Or break is likelihood does not change
     if (l1 == l0) break
     
