@@ -90,7 +90,7 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
     lambda.new <- pmin(update*lambda, lambda.max) 
     
     # Create new S.lambda matrix
-    Sl.new <- lambda*S
+    Sl.new <- lambda.new*S
     
     # Step length of update
     max.step <- max(abs(lambda.new - lambda))
