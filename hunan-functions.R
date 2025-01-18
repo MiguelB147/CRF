@@ -993,7 +993,7 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
     } else { # No improvement
         while (l1 < l0) {
           k <- k/2 ## Contract step
-          lambda3 <- pmin(update*lambda*k*7, lambda.max)
+          lambda3 <- pmin(update*lambda*k, lambda.max)
           l1 <- wrapper(coef.vector = beta, degree = degree, lambda = lambda3, S = S, H = hessian + Sl, minusLogLik = FALSE, datalist = datalist)
         }
       }
@@ -1013,13 +1013,6 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
     if (iter > 3 && max.step < 1 && max(abs(diff(score[(iter-3):iter]))) < .1) break
     # Or break is likelihood does not change
     if (l1 == l0) break
-    
-    # Calculate loglikelihood for new lambda
-    loglik.new <- wrapper(coef.vector = beta,
-                          degree = degree,
-                          datalist = datalist,
-                          S.lambda = lambda.new[1]*S1 + lambda.new[2]*S2,
-                          minusLogLik=TRUE)
     
     # Print information while running...
     print(paste0("Iteration ", iter,

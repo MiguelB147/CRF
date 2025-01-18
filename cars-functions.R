@@ -10,53 +10,36 @@ loglik <- function (param, X) {
   return(logL)
 }
 
-loglikpenal <- function (param, S.lambda) {
+# param = c(beta, sig2)
+loglikpenal <- function (param, Sl = NULL, REML = FALSE, minusloglik = TRUE) {
   
-  beta <- param[1:10]
-  sigma <- param[11]
-  
-  X <- model.matrix(mpg ~ 0 + bs(hp, df = 10))
-  
-  logL <- dnorm(mpg - X %*% beta, mean = 0, sd = sigma, log = TRUE)
-  
-  return(-sum(logL) + t(beta) %*% S.lambda %*% beta)
-}
 
-wrapper <- function(coef.vector, X, Sl=NULL, H = NULL, minusLogLik=TRUE) {
+  df <- length(param) - 1
+  beta <- param[1:df]
+  sig2 <- param[df+1]
   
-  beta <- coef.vector[-length(coef.vector)] # Only keep spline coefficients and remove sigma
-  # Check whether penalty is applied
   if (is.null(Sl)) {
-    penaltyLik <- penaltyGrad <- penaltyHess <- 0
+    logSl <- 0
+    logdetXtX <- 0
   } else {
-    
-    # Calculate penalty terms for log f_lambda(y,beta) Wood (2017) p.1076 
-    S.lambda.eigenv <- eigen(S.lambda)$values
-    
-    penaltyLik <- (t(beta) %*% Sl %*% beta)/2
-    logSl <- log(prod(Sl.eigenv[Sl.eigenv > 0]))
-    constant <- sum(Sl.eigenv == 0)*log(2*pi)/2 # Zie Wood (2016) p.1550
-    
-    # penaltyGrad <- t(t(coef.vector) %*% S.lambda)
-    # penaltyHess <- S.lambda
+    ev <- eigen(Sl/sig2)$values
+    logSl <- log(prod(ev[ev > 0]))
   }
   
-  if (is.null(H)) {
-    logdetH <- 0
-  } else {
-    logdetH <- log(det(H))
-    logSl <- logSl/2
-  }
+  X <- model.matrix(mpg ~ 0 + bs(hp, df = df))
   
+  if (REML) {
+    XtX <- crossprod(X)
+    logdetXtX <- log(det(XtX/sig2 + Sl/sig2))
+  } else logdetXtX <- 0
   
-  # Merk op dat C++ code geïmplementeerd is voor -loglik
-  sign <- ifelse(isTRUE(minusLogLik), 1, -1)
+  sign <- ifelse(isTRUE(minusloglik), -1, 1)
   
-  # log f_lambda(y,beta)
-  ll <- loglik(coef.vector, X) + penaltyLik - logS.lambda + logdetH - constant
+  ll <- - (norm(mpg - X %*% beta[-length(beta)], type = "2")^2 + t(beta) %*% Sl %*% beta)/(2*sig2) + logSl/2 - logdetXtX
+  
+  # logL <- dnorm(mpg - X %*% beta, mean = 0, sd = sigma, log = TRUE)
   
   return(sign*ll)
-  
 }
 
 
@@ -75,7 +58,7 @@ EstimatePenal <- function(S, lambda.init = 5, tol = 0.001, lambda.max = exp(15))
   
   # Initial values
   init.fit <- gam(mpg ~ s(hp, k = df), optimizer = "efs")
-  beta <- c(init.fit$coef, sqrt(init.fit$sig2))
+  beta <- c(init.fit$coef, init.fit$sig2)
   
 
   
@@ -91,28 +74,30 @@ EstimatePenal <- function(S, lambda.init = 5, tol = 0.001, lambda.max = exp(15))
     Sl.inv <- MASS::ginv(Sl)
     
     # Estimate betas for given lambdas
-    beta.fit <- nlm(f = wrapper,
+    beta.fit <- nlm(f = loglikpenal,
                     p = beta,
-                    degree = degree,
-                    lambda = lambda,
                     Sl = Sl,
                     hessian = FALSE)
     
-    # New betas to be used as initial values for possible next iteration
-    beta <- beta.fit$estimate 
+    coef <- beta.fit$estimate[1:df]
     
-    XtX <- t(X) %*% X
+    XtX <- crossprod(X)
     XtXSl.inv <- solve(XtX + Sl)
     
     
     trSSj <- sum(diag(Sl.inv %*% S))
     trVS <- sum(diag(XtXSl.inv %*% S))
-    bSb <- t(beta[-length(beta)]) %*% S %*% beta[-length(beta)]
+    bSb <- t(coef) %*% S %*% coef
+    
+    sig2 <- norm(mpg - X %*% coef, type = "2")^2 / (n - sum(diag(XtXSl.inv %*% XtX)))
+    
+    # New betas to be used as initial values for possible next iteration
+    beta <- c(coef,sig2)
     
     # Update lambdas
     update <- pmax(tiny, trSSj - trVS)/pmax(tiny, bSb) #lambda.new <- lambdaUpdate(lambda, S.lambda.inv, S, V, beta)
     update[!is.finite(update)] <- 1e6
-    lambda.new <- pmin(update*lambda, lambda.max) 
+    lambda.new <- pmin(update*lambda*sig2, lambda.max) 
     
     # Create new S.lambda matrix
     Sl.new <- lambda*S
@@ -122,35 +107,26 @@ EstimatePenal <- function(S, lambda.init = 5, tol = 0.001, lambda.max = exp(15))
     
     # Assess whether update is an increase in the log-likelihood
     # If not, apply step length control
-    l1 <- wrapper(
-      coef.vector = beta,
-      degree = degree,
-      lambda = lambda.new,
-      S = S, # TODO Na te gaan of dit oude Sl moet zijn
-      H = hessian + S.lambda, # Denk dat dit hessian + S.lambda moet zijn ipv hessian + S.lambda.new
-      minusLogLik = FALSE
-    )
-    
-    l0 <- wrapper(coef.vector = beta ,degree = degree, lambda = lambda, S = S, H = hessian + Sl, minusLogLik = FALSE, datalist = datalist)
+    l1 <- loglikpenal(param = beta, Sl = Sl.new, minusLogLik = FALSE, REML = TRUE)
+    l0 <- loglikpenal(param = beta, Sl = Sl, minusLogLik = FALSE, REML = TRUE)
     
     k = 1 # Step length
     
     if (l1 >= l0) { # Improvement
       if(max.step < 1.5) { # Consider step extension
-        lambda2 <- pmin(update*lambda*k*7, exp(12))
-        l3 <- wrapper(coef.vector = beta, degree = degree, lambda = lambda2, S = S,
-                      H = hessian + Sl, # Denk dat dit hessian + S.lambda moet zijn ipv hessian + S.lambda.new
-                      minusLogLik = FALSE,
-                      datalist = datalist
-        )
+        lambda2 <- pmin(update*lambda*k*7*sig2, exp(12))
+        Sl2 <- lambda2*S
+        l3 <- loglikpenal(param = beta, Sl = Sl2, minusLogLik = FALSE, REML = TRUE)
+        
       } if (l3 > l1) { # Improvement - accept extension
         lambda.new <- lambda2
       } else lambda.new <- lambda.new # Accept old step
     } else { # No improvement
       while (l1 < l0) {
         k <- k/2 ## Contract step
-        lambda3 <- pmin(update*lambda*k*7, lambda.max)
-        l1 <- wrapper(coef.vector = beta, degree = degree, lambda = lambda3, S = S, H = hessian + Sl, minusLogLik = FALSE, datalist = datalist)
+        lambda3 <- pmin(update*lambda*k*sig2, lambda.max)
+        Sl.new <- lambda3*S
+        l1 <- loglikpenal(param = beta, Sl = Sl.new, minusLogLik = FALSE, REML = TRUE)
       }
     }
     
@@ -162,26 +138,15 @@ EstimatePenal <- function(S, lambda.init = 5, tol = 0.001, lambda.max = exp(15))
     #save loglikelihood value
     score[iter] <- l1
     
-    # Sanity check: lambda must be positive
-    if (sum(lambda.new < 0) > 0) {stop("At least 1 lambda is negative")}
-    
     # Break procedure if REML change and step size are too small
     if (iter > 3 && max.step < 1 && max(abs(diff(score[(iter-3):iter]))) < .1) break
     # Or break is likelihood does not change
     if (l1 == l0) break
     
-    # Calculate loglikelihood for new lambda
-    loglik.new <- wrapper(coef.vector = beta,
-                          degree = degree,
-                          datalist = datalist,
-                          S.lambda = lambda.new[1]*S1 + lambda.new[2]*S2,
-                          minusLogLik=TRUE)
-    
     # Print information while running...
     print(paste0("Iteration ", iter,
                  ": k = ", k,
-                 " lambda1 = ", lambda.new[1],
-                 " lambda2 = ", lambda.new[2],
+                 " lambda = ", lambda.new,
                  " Score increase = ", score[iter] - score[iter-1],
                  " REML = ", score[iter]))
     
@@ -189,7 +154,8 @@ EstimatePenal <- function(S, lambda.init = 5, tol = 0.001, lambda.max = exp(15))
   
   
   return(list(
-    beta = beta,
+    beta = coef,
+    sig2 = sig2,
     lambda = lambda.new,
     iterations = iter,
     status = message,
