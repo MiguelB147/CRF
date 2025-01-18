@@ -130,17 +130,19 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
     #save loglikelihood value
     score[iter] <- l1
     
-    # Break procedure if REML change and step size are too small
-    if (iter > 3 && max.step < 1 && max(abs(diff(score[(iter-3):iter]))) < .1) break
-    # Or break is likelihood does not change
-    if (l1 == l0) break
-    
     # Print information while running...
     print(paste0("Iteration ", iter,
                  ": k = ", k,
                  " lambda = ", lambda.new,
                  " Score increase = ", score[iter] - score[iter-1],
                  " REML = ", score[iter]))
+    
+    # Break procedure if REML change and step size are too small
+    if (iter > 3 && max.step < 1 && max(abs(diff(score[(iter-3):iter]))) < .1) break
+    # Or break is likelihood does not change
+    if (l1 == l0) break
+    
+
     
   } # End of for loop
   
