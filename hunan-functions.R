@@ -906,9 +906,7 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
   df <- sqrt(ncol(S1))
   
   lambda.new <- lambda.init # In voorbeelden van Wood (2017) is de initiele lambda = 1
-  lambda <- 0
   
-  lldiff <- 1e10
   beta <- rep(1,df^2)
   
   print("Algorithm running...")

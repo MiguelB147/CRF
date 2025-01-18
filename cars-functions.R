@@ -53,8 +53,7 @@ EstimatePenal <- function(S, lambda.init = 5, tol = 0.001, lambda.max = exp(15))
   n <- nrowe(X)
   df <- sqrt(ncol(S))
   
-  lambda.new <- lambda.init # In voorbeelden van Wood (2017) is de initiele lambda = 1
-  lambda <- 0
+  lambda.new <- lambda.init
   
   # Initial values
   init.fit <- gam(mpg ~ s(hp, k = df), optimizer = "efs")
@@ -120,7 +119,7 @@ EstimatePenal <- function(S, lambda.init = 5, tol = 0.001, lambda.max = exp(15))
         
       } if (l3 > l1) { # Improvement - accept extension
         lambda.new <- lambda2
-      } else lambda.new <- lambda.new # Accept old step
+      } else lambda.new <- lambda.new # No improvement - Accept old step
     } else { # No improvement
       while (l1 < l0) {
         k <- k/2 ## Contract step
@@ -151,7 +150,6 @@ EstimatePenal <- function(S, lambda.init = 5, tol = 0.001, lambda.max = exp(15))
                  " REML = ", score[iter]))
     
   } # End of for loop
-  
   
   return(list(
     beta = coef,
