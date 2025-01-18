@@ -5,9 +5,22 @@ head(mtcars)
 attach(mtcars)
 
 library(mgcv)
+library(splines)
+
+source("cars-functions.R")
 
 
 fit.gam <- gam_model <- gam(mpg ~ s(hp, k = 10), optimizer = 'efs')
+c(fit.gam$coef, fit.gam$sig2)
+fit.gam$sp
+
+S <- crossprod(diff(diag(10)))
+Sl <- fit.gam$sp*S
+
+
+EstimatePenal(S = S, lambda.init = 0.5)
+
+test <- nlm(loglikpenal, c(fit.gam$coef, fit.gam$sig2), Sl = Sl)
 
 plot(hp,mpg)
 lines(sort(hp), fitted(fit.gam)[order(hp)])

@@ -11,7 +11,7 @@ loglik <- function (param, X) {
 }
 
 # param = c(beta, sig2)
-loglikpenal <- function (param, Sl = NULL, REML = FALSE, minusloglik = TRUE) {
+loglikpenal <- function (param, Sl = NULL, minusloglik = TRUE, REML = FALSE) {
   
 
   df <- length(param) - 1
@@ -35,7 +35,7 @@ loglikpenal <- function (param, Sl = NULL, REML = FALSE, minusloglik = TRUE) {
   
   sign <- ifelse(isTRUE(minusloglik), -1, 1)
   
-  ll <- - (norm(mpg - X %*% beta[-length(beta)], type = "2")^2 + t(beta) %*% Sl %*% beta)/(2*sig2) + logSl/2 - logdetXtX
+  ll <- - (norm(mpg - X %*% beta, type = "2")^2 + t(beta) %*% Sl %*% beta)/(2*sig2) + logSl/2 - logdetXtX
   
   # logL <- dnorm(mpg - X %*% beta, mean = 0, sd = sigma, log = TRUE)
   
@@ -43,15 +43,14 @@ loglikpenal <- function (param, Sl = NULL, REML = FALSE, minusloglik = TRUE) {
 }
 
 
-# EFS gebaseerd op de code van Simon Wood in het mgcv package (zie gam.fit4.r op github)
-# gam.control() details in mgcv.r op github
-EstimatePenal <- function(S, lambda.init = 5, tol = 0.001, lambda.max = exp(15)) { 
+EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15)) { 
   
   tiny <- .Machine$double.eps^0.5
+
+  df <- ncol(S)
   
   X <- model.matrix(mpg ~ 0 + bs(hp, df = df, intercept = TRUE))
-  n <- nrowe(X)
-  df <- sqrt(ncol(S))
+  n <- nrow(X)
   
   lambda.new <- lambda.init
   
@@ -73,12 +72,12 @@ EstimatePenal <- function(S, lambda.init = 5, tol = 0.001, lambda.max = exp(15))
     Sl.inv <- MASS::ginv(Sl)
     
     # Estimate betas for given lambdas
-    beta.fit <- nlm(f = loglikpenal,
-                    p = beta,
-                    Sl = Sl,
-                    hessian = FALSE)
+    beta.fit <- optim(par = beta,
+                      fn = loglikpenal,
+                      Sl = Sl,
+                      hessian = FALSE)
     
-    coef <- beta.fit$estimate[1:df]
+    coef <- beta.fit$par[1:df]
     
     XtX <- crossprod(X)
     XtXSl.inv <- solve(XtX + Sl)
@@ -88,7 +87,8 @@ EstimatePenal <- function(S, lambda.init = 5, tol = 0.001, lambda.max = exp(15))
     trVS <- sum(diag(XtXSl.inv %*% S))
     bSb <- t(coef) %*% S %*% coef
     
-    sig2 <- norm(mpg - X %*% coef, type = "2")^2 / (n - sum(diag(XtXSl.inv %*% XtX)))
+    # sig2 <- norm(mpg - X %*% coef, type = "2")^2 / (n - sum(diag(XtXSl.inv %*% XtX)))
+    sig2 <- beta.fit$par[df+1]
     
     # New betas to be used as initial values for possible next iteration
     beta <- c(coef,sig2)
@@ -106,8 +106,8 @@ EstimatePenal <- function(S, lambda.init = 5, tol = 0.001, lambda.max = exp(15))
     
     # Assess whether update is an increase in the log-likelihood
     # If not, apply step length control
-    l1 <- loglikpenal(param = beta, Sl = Sl.new, minusLogLik = FALSE, REML = TRUE)
-    l0 <- loglikpenal(param = beta, Sl = Sl, minusLogLik = FALSE, REML = TRUE)
+    l1 <- loglikpenal(param = beta, Sl = Sl.new, minusloglik = FALSE, REML = TRUE)
+    l0 <- loglikpenal(param = beta, Sl = Sl, minusloglik = FALSE, REML = TRUE)
     
     k = 1 # Step length
     
@@ -115,24 +115,26 @@ EstimatePenal <- function(S, lambda.init = 5, tol = 0.001, lambda.max = exp(15))
       if(max.step < 1.5) { # Consider step extension
         lambda2 <- pmin(update*lambda*k*7*sig2, exp(12))
         Sl2 <- lambda2*S
-        l3 <- loglikpenal(param = beta, Sl = Sl2, minusLogLik = FALSE, REML = TRUE)
+        l3 <- loglikpenal(param = beta, Sl = Sl2, minusloglik = FALSE, REML = TRUE)
         
-      } if (l3 > l1) { # Improvement - accept extension
+      if (l3 > l1) { # Improvement - accept extension
         lambda.new <- lambda2
       } else lambda.new <- lambda.new # No improvement - Accept old step
-    } else { # No improvement
+    }
+      } else { # No improvement
       while (l1 < l0) {
         k <- k/2 ## Contract step
-        lambda3 <- pmin(update*lambda*k*sig2, lambda.max)
-        Sl.new <- lambda3*S
-        l1 <- loglikpenal(param = beta, Sl = Sl.new, minusLogLik = FALSE, REML = TRUE)
+        lambda.new <- pmin(update*lambda*k*sig2, lambda.max)
+        Sl.new <- lambda.new*S
+        l1 <- loglikpenal(param = beta, Sl = Sl.new, minusloglik = FALSE, REML = TRUE)
       }
     }
     
     # If step length control is needed, update lambda accordingly
     if(k < 1) {
       lambda.new <- lambda3
-      max.step <- max(abs(lambda.new - lambda))}
+      max.step <- max(abs(lambda.new - lambda))
+      }
     
     #save loglikelihood value
     score[iter] <- l1
@@ -156,6 +158,5 @@ EstimatePenal <- function(S, lambda.init = 5, tol = 0.001, lambda.max = exp(15))
     sig2 = sig2,
     lambda = lambda.new,
     iterations = iter,
-    status = message,
     history = score))
 }
