@@ -18,12 +18,14 @@ S <- crossprod(diff(diag(10)))
 Sl <- fit.gam$sp*S
 
 
-EstimatePenal(S = S, lambda.init = 10)
+test <- EstimatePenal(S = S, lambda.init = 10)
+y.fit <- model.matrix(mpg ~ 0 + bs(hp, df = 10, intercept = TRUE)) %*% test$beta 
 
 test <- nlm(loglikpenal, c(fit.gam$coef, fit.gam$sig2), Sl = Sl)
 
 plot(hp,mpg)
 lines(sort(hp), fitted(fit.gam)[order(hp)])
+lines(sort(hp), y.fit[order(hp)], col = "red")
 
 
 S <- crossprod(diff(diag(10)))
