@@ -1027,7 +1027,6 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
     beta = beta,
     lambda = lambda.new,
     iterations = iter,
-    status = message,
     history = score))
 }
 

@@ -18,7 +18,7 @@ S <- crossprod(diff(diag(10)))
 Sl <- fit.gam$sp*S
 
 
-EstimatePenal(S = S, lambda.init = 0.5)
+EstimatePenal(S = S, lambda.init = 10)
 
 test <- nlm(loglikpenal, c(fit.gam$coef, fit.gam$sig2), Sl = Sl)
 

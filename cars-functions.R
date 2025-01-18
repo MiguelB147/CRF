@@ -5,37 +5,36 @@ loglik <- function (param, X) {
   
   pred <- X %*% beta
   
-  logL <- -sum(dnorm(mpg, mean = pred, sd = sigma, log = TRUE))
+  logL <- -sum(dnorm(mpg, mean = pred, sd = sqrt(9.54816882), log = TRUE))
   
   return(logL)
 }
 
 # param = c(beta, sig2)
-loglikpenal <- function (param, Sl = NULL, minusloglik = TRUE, REML = FALSE) {
+loglikpenal <- function (param, Sl = NULL, H = NULL, minusloglik = TRUE) {
   
-
-  df <- length(param) - 1
-  beta <- param[1:df]
-  sig2 <- param[df+1]
+  beta <- param
+  df <- length(param)
   
   if (is.null(Sl)) {
     logSl <- 0
-    logdetXtX <- 0
+    logdetH <- 0
+    penalty <- 0
   } else {
-    ev <- eigen(Sl/sig2)$values
+    ev <- eigen(Sl)$values
     logSl <- log(prod(ev[ev > 0]))
+    penalty <- (t(beta) %*% Sl %*% beta)/2
   }
   
-  X <- model.matrix(mpg ~ 0 + bs(hp, df = df))
+  X <- model.matrix(mpg ~ 0 + bs(hp, df = df), intercept = TRUE)
   
-  if (REML) {
-    XtX <- crossprod(X)
-    logdetXtX <- log(det(XtX/sig2 + Sl/sig2))
-  } else logdetXtX <- 0
+  if (!is.null(H)) {
+    logdetH <- log(det(H + Sl))
+  } else logdetH <- 0
   
   sign <- ifelse(isTRUE(minusloglik), -1, 1)
   
-  ll <- - (norm(mpg - X %*% beta, type = "2")^2 + t(beta) %*% Sl %*% beta)/(2*sig2) + logSl/2 - logdetXtX
+  ll <- sum(dnorm(mpg, mean = X %*% beta, sd = sqrt(9.54816882), log = TRUE)) - penalty  + logSl/2 - logdetH/2
   
   # logL <- dnorm(mpg - X %*% beta, mean = 0, sd = sigma, log = TRUE)
   
@@ -50,13 +49,12 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
   df <- ncol(S)
   
   X <- model.matrix(mpg ~ 0 + bs(hp, df = df, intercept = TRUE))
-  n <- nrow(X)
   
   lambda.new <- lambda.init
   
   # Initial values
   init.fit <- gam(mpg ~ s(hp, k = df), optimizer = "efs")
-  beta <- c(init.fit$coef, init.fit$sig2)
+  beta <- init.fit$coef
   
 
   
@@ -75,28 +73,21 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
     beta.fit <- optim(par = beta,
                       fn = loglikpenal,
                       Sl = Sl,
-                      hessian = FALSE)
+                      hessian = TRUE)
     
-    coef <- beta.fit$par[1:df]
+    beta <- beta.fit$par
     
-    XtX <- crossprod(X)
-    XtXSl.inv <- solve(XtX + Sl)
-    
+    V <- solve(beta.fit$hessian + Sl)
     
     trSSj <- sum(diag(Sl.inv %*% S))
-    trVS <- sum(diag(XtXSl.inv %*% S))
-    bSb <- t(coef) %*% S %*% coef
+    trVS <- sum(diag(V %*% S))
+    bSb <- t(beta) %*% S %*% beta
     
-    # sig2 <- norm(mpg - X %*% coef, type = "2")^2 / (n - sum(diag(XtXSl.inv %*% XtX)))
-    sig2 <- beta.fit$par[df+1]
-    
-    # New betas to be used as initial values for possible next iteration
-    beta <- c(coef,sig2)
     
     # Update lambdas
-    update <- pmax(tiny, trSSj - trVS)/pmax(tiny, bSb) #lambda.new <- lambdaUpdate(lambda, S.lambda.inv, S, V, beta)
+    update <- pmax(tiny, trSSj - trVS)/pmax(tiny, bSb)
     update[!is.finite(update)] <- 1e6
-    lambda.new <- pmin(update*lambda*sig2, lambda.max) 
+    lambda.new <- pmin(update*lambda, lambda.max) 
     
     # Create new S.lambda matrix
     Sl.new <- lambda*S
@@ -106,16 +97,16 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
     
     # Assess whether update is an increase in the log-likelihood
     # If not, apply step length control
-    l1 <- loglikpenal(param = beta, Sl = Sl.new, minusloglik = FALSE, REML = TRUE)
-    l0 <- loglikpenal(param = beta, Sl = Sl, minusloglik = FALSE, REML = TRUE)
+    l1 <- loglikpenal(param = beta, Sl = Sl.new, H = beta.fit$hessian, minusloglik = FALSE)
+    l0 <- loglikpenal(param = beta, Sl = Sl, H = beta.fit$hessian, minusloglik = FALSE)
     
     k = 1 # Step length
     
     if (l1 >= l0) { # Improvement
       if(max.step < 1.5) { # Consider step extension
-        lambda2 <- pmin(update*lambda*k*7*sig2, exp(12))
+        lambda2 <- pmin(update*lambda*k*7, exp(12))
         Sl2 <- lambda2*S
-        l3 <- loglikpenal(param = beta, Sl = Sl2, minusloglik = FALSE, REML = TRUE)
+        l3 <- loglikpenal(param = beta, Sl = Sl2, H = beta.fit$hessian, minusloglik = FALSE)
         
       if (l3 > l1) { # Improvement - accept extension
         lambda.new <- lambda2
@@ -124,9 +115,9 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
       } else { # No improvement
       while (l1 < l0) {
         k <- k/2 ## Contract step
-        lambda.new <- pmin(update*lambda*k*sig2, lambda.max)
+        lambda.new <- pmin(update*lambda*k, lambda.max)
         Sl.new <- lambda.new*S
-        l1 <- loglikpenal(param = beta, Sl = Sl.new, minusloglik = FALSE, REML = TRUE)
+        l1 <- loglikpenal(param = beta, Sl = Sl.new, H = beta.fit$hessian, minusloglik = FALSE)
       }
     }
     
@@ -154,8 +145,7 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
   } # End of for loop
   
   return(list(
-    beta = coef,
-    sig2 = sig2,
+    beta = beta,
     lambda = lambda.new,
     iterations = iter,
     history = score))
