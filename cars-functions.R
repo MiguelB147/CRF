@@ -113,18 +113,21 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
       } # No improvement - Accept old step
     }
       } else { # No improvement
-      while (l1 < l0 && k > 0.001) { # Don't contract too much since the likelihood does not need to increase
+        lk <- l1
+      while (lk < l0 && k > 0.001) { # Don't contract too much since the likelihood does not need to increase
         k <- k/2 ## Contract step
-        lambda.new <- pmin(update*lambda*k, lambda.max)
-        Sl.new <- lambda.new*S
-        l1 <- loglikpenal(param = beta, Sl = Sl.new, H = beta.fit$hessian, minusloglik = FALSE)
+        lambda3 <- pmin(update*lambda*k, lambda.max)
+        Sl.new <- lambda3*S
+        lk <- loglikpenal(param = beta, Sl = Sl.new, H = beta.fit$hessian, minusloglik = FALSE)
       }
     }
     
     # If step length control is needed, update lambda accordingly
-    if(k < 1) {
+    if (k < 1 & k > 0.001) {
+      lambda.new <- lambda3
+      l1 <- lk
       max.step <- max(abs(lambda.new - lambda))
-      }
+      } else k <- 1
     
     #save loglikelihood value
     score[iter] <- l1
@@ -137,7 +140,7 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
                  " REML = ", score[iter]))
     
     # Break procedure if REML change and step size are too small
-    if (iter > 3 && max.step < 1 && max(abs(diff(score[(iter-3):iter]))) < .1) break
+    if (iter > 3 && max.step < 1 && max(abs(diff(score[(iter-3):iter]))) < .5) break
     # Or break is likelihood does not change
     if (l1 == l0) break
     
