@@ -1,9 +1,8 @@
-loglik <- function (param) {
+loglik <- function (param, X) {
   
   beta <- param[1:10]
   sigma <- param[11]
   
-  X <- model.matrix(mpg ~ 0 + bs(hp, df = 10, intercept = TRUE))
   pred <- X %*% beta
   
   logL <- -sum(dnorm(mpg, mean = pred, sd = sigma, log = TRUE))
@@ -11,7 +10,7 @@ loglik <- function (param) {
   return(logL)
 }
 
-loglikpenal <- function (param,S.lambda) {
+loglikpenal <- function (param, S.lambda) {
   
   beta <- param[1:10]
   sigma <- param[11]
@@ -23,20 +22,20 @@ loglikpenal <- function (param,S.lambda) {
   return(-sum(logL) + t(beta) %*% S.lambda %*% beta)
 }
 
-wrapper <- function(coef.vector, S.lambda=NULL, H = NULL, minusLogLik=TRUE) {
+wrapper <- function(coef.vector, X, Sl=NULL, H = NULL, minusLogLik=TRUE) {
   
-  beta <- coef.vector[2:10]
+  beta <- coef.vector[-length(coef.vector)] # Only keep spline coefficients and remove sigma
   # Check whether penalty is applied
-  if (is.null(S.lambda)) {
+  if (is.null(Sl)) {
     penaltyLik <- penaltyGrad <- penaltyHess <- 0
   } else {
     
     # Calculate penalty terms for log f_lambda(y,beta) Wood (2017) p.1076 
     S.lambda.eigenv <- eigen(S.lambda)$values
     
-    penaltyLik <- (t(beta) %*% S.lambda %*% beta)/2
-    logS.lambda <- log(prod(S.lambda.eigenv[S.lambda.eigenv > 0]))
-    constant <- sum(S.lambda.eigenv == 0)*log(2*pi)/2 # Zie Wood (2016) p.1550
+    penaltyLik <- (t(beta) %*% Sl %*% beta)/2
+    logSl <- log(prod(Sl.eigenv[Sl.eigenv > 0]))
+    constant <- sum(Sl.eigenv == 0)*log(2*pi)/2 # Zie Wood (2016) p.1550
     
     # penaltyGrad <- t(t(coef.vector) %*% S.lambda)
     # penaltyHess <- S.lambda
@@ -46,7 +45,7 @@ wrapper <- function(coef.vector, S.lambda=NULL, H = NULL, minusLogLik=TRUE) {
     logdetH <- 0
   } else {
     logdetH <- log(det(H))
-    logS.lambda <- logS.lambda/2
+    logSl <- logSl/2
   }
   
   
@@ -54,7 +53,7 @@ wrapper <- function(coef.vector, S.lambda=NULL, H = NULL, minusLogLik=TRUE) {
   sign <- ifelse(isTRUE(minusLogLik), 1, -1)
   
   # log f_lambda(y,beta)
-  ll <- loglik(coef.vector) + penaltyLik - logS.lambda + logdetH - constant
+  ll <- loglik(coef.vector, X) + penaltyLik - logS.lambda + logdetH - constant
   
   return(sign*ll)
   
@@ -63,20 +62,22 @@ wrapper <- function(coef.vector, S.lambda=NULL, H = NULL, minusLogLik=TRUE) {
 
 # EFS gebaseerd op de code van Simon Wood in het mgcv package (zie gam.fit4.r op github)
 # gam.control() details in mgcv.r op github
-EstimatePenal <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0.001, lambda.max = exp(15)) { 
+EstimatePenal <- function(S, lambda.init = 5, tol = 0.001, lambda.max = exp(15)) { 
   
   tiny <- .Machine$double.eps^0.5
   
-  S1 <- S[[1]]
-  S2 <- S[[2]]
-  
-  df <- sqrt(ncol(S1))
+  X <- model.matrix(mpg ~ 0 + bs(hp, df = df, intercept = TRUE))
+  n <- nrowe(X)
+  df <- sqrt(ncol(S))
   
   lambda.new <- lambda.init # In voorbeelden van Wood (2017) is de initiele lambda = 1
   lambda <- 0
   
-  lldiff <- 1e10
-  beta <- rep(1,df^2)
+  # Initial values
+  init.fit <- gam(mpg ~ s(hp, k = df), optimizer = "efs")
+  beta <- c(init.fit$coef, sqrt(init.fit$sig2))
+  
+
   
   print("Algorithm running...")
   
@@ -86,7 +87,7 @@ EstimatePenal <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0.001
     lambda <- lambda.new
     
     # Some calculations to update lambda later...
-    Sl <- lambda[1]*S1 + lambda[2]*S2
+    Sl <- lambda*S
     Sl.inv <- MASS::ginv(Sl)
     
     # Estimate betas for given lambdas
@@ -94,29 +95,19 @@ EstimatePenal <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0.001
                     p = beta,
                     degree = degree,
                     lambda = lambda,
-                    S = S,
-                    datalist = datalist,
+                    Sl = Sl,
                     hessian = FALSE)
     
     # New betas to be used as initial values for possible next iteration
     beta <- beta.fit$estimate
     
-    # Make sure that hessian is positive definite
-    hessian <- derivatives(coef.vector = beta, degree = degree, datalist = datalist)$hessian
-    decomp <- eigen(beta.fit$hessian)
-    A <- diag(abs(decomp$values))
-    hessian <- decomp$vectors %*% A %*% t(decomp$vectors)
+    XtX <- t(X) %*% X
+    XtXSl.inv <- solve(XtX + Sl)
     
-    # Calculate V
-    V <- solve(hessian + Sl)
     
-    # Calculate trSSj, trVS and bSb
-    trSSj <- trVS <- bSb <- c()
-    for (i in length(S)) {
-      trSSj[i] <- sum(diag(Sl.inv %*% S[[i]]))
-      trVS[i] <- sum(diag(V %*% S[[i]]))
-      bSb[i] <- t(beta) %*% S[[i]] %*% beta
-    }
+    trSSj <- sum(diag(Sl.inv %*% S))
+    trVS <- sum(diag(XtXSl.inv %*% S))
+    bSb <- t(beta) %*% S %*% beta
     
     # Update lambdas
     update <- pmax(tiny, trSSj - trVS)/pmax(tiny, bSb) #lambda.new <- lambdaUpdate(lambda, S.lambda.inv, S, V, beta)
@@ -124,7 +115,7 @@ EstimatePenal <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0.001
     lambda.new <- pmin(update*lambda, lambda.max) 
     
     # Create new S.lambda matrix
-    Sl.new <- lambda.new[1]*S1 + lambda.new[2]*S2
+    Sl.new <- lambda*S
     
     # Step length of update
     max.step <- max(abs(lambda.new - lambda))
