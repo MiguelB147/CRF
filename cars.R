@@ -5,7 +5,7 @@ head(mtcars)
 attach(mtcars)
 
 library(mgcv)
-library(bbmle)
+
 
 fit.gam <- gam_model <- gam(mpg ~ s(hp, k = 10), optimizer = 'efs')
 

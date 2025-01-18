@@ -99,7 +99,7 @@ EstimatePenal <- function(S, lambda.init = 5, tol = 0.001, lambda.max = exp(15))
                     hessian = FALSE)
     
     # New betas to be used as initial values for possible next iteration
-    beta <- beta.fit$estimate
+    beta <- beta.fit$estimate 
     
     XtX <- t(X) %*% X
     XtXSl.inv <- solve(XtX + Sl)
@@ -107,7 +107,7 @@ EstimatePenal <- function(S, lambda.init = 5, tol = 0.001, lambda.max = exp(15))
     
     trSSj <- sum(diag(Sl.inv %*% S))
     trVS <- sum(diag(XtXSl.inv %*% S))
-    bSb <- t(beta) %*% S %*% beta
+    bSb <- t(beta[-length(beta)]) %*% S %*% beta[-length(beta)]
     
     # Update lambdas
     update <- pmax(tiny, trSSj - trVS)/pmax(tiny, bSb) #lambda.new <- lambdaUpdate(lambda, S.lambda.inv, S, V, beta)
@@ -120,7 +120,6 @@ EstimatePenal <- function(S, lambda.init = 5, tol = 0.001, lambda.max = exp(15))
     # Step length of update
     max.step <- max(abs(lambda.new - lambda))
     
-    # TODO Bij Wood wordt nieuwe lambda en oude Sl gebruikt. Hoe doen we dit in deze context?
     # Assess whether update is an increase in the log-likelihood
     # If not, apply step length control
     l1 <- wrapper(
@@ -129,8 +128,7 @@ EstimatePenal <- function(S, lambda.init = 5, tol = 0.001, lambda.max = exp(15))
       lambda = lambda.new,
       S = S, # TODO Na te gaan of dit oude Sl moet zijn
       H = hessian + S.lambda, # Denk dat dit hessian + S.lambda moet zijn ipv hessian + S.lambda.new
-      minusLogLik = FALSE,
-      datalist = datalist
+      minusLogLik = FALSE
     )
     
     l0 <- wrapper(coef.vector = beta ,degree = degree, lambda = lambda, S = S, H = hessian + Sl, minusLogLik = FALSE, datalist = datalist)
