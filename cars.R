@@ -15,7 +15,6 @@ c(fit.gam$coef, fit.gam$sig2)
 fit.gam$sp
 
 S <- crossprod(diff(diag(10)))
-Sl <- fit.gam$sp*S
 
 
 test <- EstimatePenal(S = S, lambda.init = 10)
