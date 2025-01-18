@@ -110,7 +110,7 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
         
       if (l3 > l1) { # Improvement - accept extension
         lambda.new <- lambda2
-      } else lambda.new <- lambda.new # No improvement - Accept old step
+      } # No improvement - Accept old step
     }
       } else { # No improvement
       while (l1 < l0) {
@@ -123,7 +123,6 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
     
     # If step length control is needed, update lambda accordingly
     if(k < 1) {
-      lambda.new <- lambda3
       max.step <- max(abs(lambda.new - lambda))
       }
     
