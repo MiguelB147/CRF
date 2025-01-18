@@ -1029,7 +1029,7 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
                  " Score increase = ", score[iter] - score[iter-1],
                  " REML = ", score[iter]))
     
-  } # end of outer while loop
+  } # End of for loop
   
   
   return(list(
