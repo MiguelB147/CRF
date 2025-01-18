@@ -113,7 +113,7 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
       } # No improvement - Accept old step
     }
       } else { # No improvement
-      while (l1 < l0 && k > 1) {
+      while (l1 < l0 && k > 0.001) {
         k <- k/2 ## Contract step
         lambda.new <- pmin(update*lambda*k, lambda.max)
         Sl.new <- lambda.new*S
