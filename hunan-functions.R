@@ -909,7 +909,7 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
   
   beta <- rep(1,df^2)
   
-  print("Algorithm running...")
+  print("Extended Fellner-Schall method:")
   
   score <- c()
   for (iter in 1:200) {

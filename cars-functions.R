@@ -58,7 +58,7 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
   
 
   
-  print("Algorithm running...")
+  print("Extended Fellner-Schall method:")
   
   score <- c()
   for (iter in 1:200) {
