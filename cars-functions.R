@@ -104,7 +104,7 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
     
     if (l1 >= l0) { # Improvement
       if(max.step < 1.5) { # Consider step extension
-        lambda2 <- pmin(update*lambda*k*7, exp(12))
+        lambda2 <- pmin(update*lambda*k*2, exp(12))
         Sl2 <- lambda2*S
         l3 <- loglikpenal(param = beta, Sl = Sl2, H = beta.fit$hessian, minusloglik = FALSE)
         
