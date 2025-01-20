@@ -3,6 +3,7 @@ data(mtcars)
 head(mtcars)
 
 attach(mtcars)
+detach(mtcars)
 
 library(mgcv)
 library(splines)
@@ -10,43 +11,28 @@ library(splines)
 source("cars-functions.R")
 
 
-fit.gam <- gam_model <- gam(mpg ~ s(hp, k = 10), optimizer = 'efs')
+fit.gam <- gam_model <- gam(mpg ~ s(hp, k = 10, bs = "bs"), optimizer = 'efs')
 c(fit.gam$coef, fit.gam$sig2)
 fit.gam$sp
 
-S <- crossprod(diff(diag(10)))
 
+df <- 10
+S <- crossprod(diff(diag(10), differences = 2))
 
 test <- EstimatePenal(S = S, lambda.init = 10)
-y.fit <- model.matrix(mpg ~ 0 + bs(hp, df = 10, intercept = TRUE)) %*% test$beta 
 
-test <- nlm(loglikpenal, c(fit.gam$coef, fit.gam$sig2), Sl = Sl)
+
+
+nk <- df - 3 + 1 # Number of knots
+xl <- min(hp); xu <- max(hp); xr <- xu - xl
+xl <- xl - 0.001*xr; xu <- xu + 0.001*xr
+k <- seq(xl, xu, length = nk)
+X <- model.matrix(mpg ~ splines::bs(hp, knots = k[-c(1,length(k))], Boundary.knots = k[c(1, length(k))]))
+y.fit <- X %*% test$beta 
+
+cbind(fitted(fit.gam), y.fit)
 
 plot(hp,mpg)
 lines(sort(hp), fitted(fit.gam)[order(hp)])
 lines(sort(hp), y.fit[order(hp)], col = "red")
-
-
-S <- crossprod(diff(diag(10)))
-lambda <- seq(1,100, by = 0.5)
-
-mLogLik <- avg <- c()
-for (i in 1:length(lambda)) {
-  
-  S.lambda <- lambda[i]*S
-  S.lambda.inv <- ginv(S.lambda)
-  for(j in 1:1000) {
-    beta <- mvrnorm(1, mu = rep(0,10), Sigma = S.lambda.inv)
-    mLogLik[j] <- loglik(c(beta,3)) + t(beta) %*% S.lambda %*% beta
-  }
-  avg[i] <- mean(mLogLik)
-}
-
-lambda[which.min(avg)]
-
-test <- nlm(loglik, p = , hessian = FALSE)
-
-test <- EstimatePenal(S, lambda.init = 20)
-
-coef(fit.gam)
 

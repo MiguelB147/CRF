@@ -1,14 +1,5 @@
-loglik <- function (param, X) {
-  
-  beta <- param[1:10]
-  sigma <- param[11]
-  
-  pred <- X %*% beta
-  
-  logL <- -sum(dnorm(mpg, mean = pred, sd = sqrt(9.54816882), log = TRUE))
-  
-  return(logL)
-}
+
+
 
 # param = c(beta, sig2)
 loglikpenal <- function (param, X, Sl = NULL, H = NULL, minusloglik = TRUE) {
@@ -32,9 +23,9 @@ loglikpenal <- function (param, X, Sl = NULL, H = NULL, minusloglik = TRUE) {
   
   sign <- ifelse(isTRUE(minusloglik), -1, 1)
   
-  ll <- sum(dnorm(mpg, mean = X %*% beta, sd = sqrt(9.54816882), log = TRUE)) - penalty  + logSl/2 - logdetH/2
+  ll <- sum(dnorm(accel, mean = X %*% beta, sd = sqrt(517.5197), log = TRUE)) - penalty  + logSl/2 - logdetH/2
   
-  # logL <- dnorm(mpg - X %*% beta, mean = 0, sd = sigma, log = TRUE)
+  # logL <- dnorm(accel - X %*% beta, mean = 0, sd = sigma, log = TRUE)
   
   return(sign*ll)
 }
@@ -43,30 +34,30 @@ loglikpenal <- function (param, X, Sl = NULL, H = NULL, minusloglik = TRUE) {
 EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15)) { 
   
   tiny <- .Machine$double.eps^0.5
-
+  
   df <- ncol(S)
   
   # Positioning of the knots
-  nk <- df - 3 + 1 # Number of knots
-  xl <- min(hp); xu <- max(hp); xr <- xu - xl
+  nk <- df - 3 + 1# Number of knots
+  xl <- min(times); xu <- max(times); xr <- xu - xl
   xl <- xl - 0.001*xr; xu <- xu + 0.001*xr
   k <- seq(xl, xu, length = nk)
-
-  X <- model.matrix(mpg ~ splines::bs(hp, knots = k[-c(1,length(k))], Boundary.knots = k[c(1, length(k))]))
   
-  # xr <- max(hp) - min(hp)
-  # boundary <- c(min(hp) - 0.001*xr, max(hp) + 0.001*xr)
+  X <- model.matrix(accel ~ splines::bs(times, knots = k[-c(1,length(k))], Boundary.knots = k[c(1, length(k))]))
+  
+  # xr <- max(times) - min(times)
+  # boundary <- c(min(times) - 0.001*xr, max(times) + 0.001*xr)
   # 
-  # X <- model.matrix(mpg ~ splines::bs(hp, df = df - 1, Boundary.knots = boundary))
+  # X <- model.matrix(accel ~ splines::bs(times, df = df - 1, Boundary.knots = boundary))
   
   
   lambda.new <- lambda.init
   
   # Initial values
-  init.fit <- gam(mpg ~ s(hp, k = df), optimizer = "efs")
+  init.fit <- gam(accel ~ s(times, k = df), optimizer = "efs")
   beta <- init.fit$coef
   
-
+  
   
   print("Extended Fellner-Schall method:")
   
@@ -119,12 +110,12 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
         Sl2 <- lambda2*S
         l3 <- loglikpenal(param = beta, X = X, Sl = Sl2, H = beta.fit$hessian, minusloglik = FALSE)
         
-      if (l3 > l1) { # Improvement - accept extension
-        lambda.new <- lambda2
-      } # No improvement - Accept old step
-    }
-      } else { # No improvement
-        lk <- l1
+        if (l3 > l1) { # Improvement - accept extension
+          lambda.new <- lambda2
+        } # No improvement - Accept old step
+      }
+    } else { # No improvement
+      lk <- l1
       while (lk < l0 && k > 0.001) { # Don't contract too much since the likelihood does not need to increase
         k <- k/2 ## Contract step
         lambda3 <- pmin(update*lambda*k, lambda.max)
@@ -138,7 +129,7 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
       lambda.new <- lambda3
       l1 <- lk
       max.step <- max(abs(lambda.new - lambda))
-      } else k <- 1
+    } else k <- 1
     
     #save loglikelihood value
     score[iter] <- l1
@@ -155,7 +146,7 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
     # Or break is likelihood does not change
     if (l1 == l0) break
     
-
+    
     
   } # End of for loop
   
