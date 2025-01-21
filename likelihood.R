@@ -1,7 +1,7 @@
 library(splines)
 library(Rcpp)
 library(progress)
-library(doParallel)
+
 
 source('hunan-functions.R')
 sourceCpp('test.cpp')
@@ -28,13 +28,13 @@ try <- seq(-4,4, 0.01)
 
 pb <- progress_bar$new(
   format = "Simulation = [:bar] :percent [Elapsed time: :elapsedfull | Estimated time remaining: :eta]",
-  total = nsim,
+  total = length(fit$estimate),
   clear = FALSE)
 
 ll <- matrix(nrow = length(try), ncol = length(fit$estimate))
 for (j in 1:length(fit$estimate)) {
+  pb$tick()
   for (i in 1:length(try)) {
-    pb$tick
     coef <- fit$estimate
     coef[j] <- try[i]
     ll[i,j] <- loglikCpp(coef.vector = coef, degree = degree, df = df, datalist = datalist)
