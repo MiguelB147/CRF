@@ -44,21 +44,13 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
   
   tiny <- .Machine$double.eps^0.5
 
-  df <- ncol(S)
+  df <- ncol(S) + 1
   
-  # Positioning of the knots
-  nk <- df - 3 + 1 # Number of knots
+  # Positioning of the boundary knots
   xl <- min(hp); xu <- max(hp); xr <- xu - xl
   xl <- xl - 0.001*xr; xu <- xu + 0.001*xr
-  k <- seq(xl, xu, length = nk)
 
-  X <- model.matrix(mpg ~ splines::bs(hp, knots = k[-c(1,length(k))], Boundary.knots = k[c(1, length(k))]))
-  
-  # xr <- max(hp) - min(hp)
-  # boundary <- c(min(hp) - 0.001*xr, max(hp) + 0.001*xr)
-  # 
-  # X <- model.matrix(mpg ~ splines::bs(hp, df = df - 1, Boundary.knots = boundary))
-  
+  X <- model.matrix(mpg ~ splines::bs(hp, df = df, Boundary.knots = c(xl,xu), intercept = TRUE))
   
   lambda.new <- lambda.init
   
