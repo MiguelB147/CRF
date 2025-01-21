@@ -6,7 +6,6 @@ attach(mtcars)
 detach(mtcars)
 
 library(mgcv)
-library(splines)
 
 source("cars-functions.R")
 
@@ -17,13 +16,13 @@ fit.gam$sp
 
 
 df <- 10
-S <- crossprod(diff(diag(df-1), differences = 2))
+S <- crossprod(diff(diag(df-1), differences = 1))
 
 test <- EstimatePenal(S = S, lambda.init = 10)
 
 xl <- min(hp); xu <- max(hp); xr <- xu - xl
 xl <- xl - 0.001*xr; xu <- xu + 0.001*xr
-X <- model.matrix(mpg ~ splines::bs(hp, df = df, Boundary.knots = c(xl,xu), intercept = TRUE))
+X <- model.matrix(mpg ~ 0 + splines::bs(hp, df = df, Boundary.knots = c(xl,xu), intercept = TRUE))
 y.fit <- X %*% test$beta
 
 # nk <- df - 3 + 1 # Number of knots

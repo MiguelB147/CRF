@@ -1,14 +1,3 @@
-loglik <- function (param, X) {
-  
-  beta <- param[1:10]
-  sigma <- param[11]
-  
-  pred <- X %*% beta
-  
-  logL <- -sum(dnorm(mpg, mean = pred, sd = sqrt(9.54816882), log = TRUE))
-  
-  return(logL)
-}
 
 # param = c(beta, sig2)
 loglikpenal <- function (param, X, Sl = NULL, H = NULL, minusloglik = TRUE) {
@@ -23,7 +12,7 @@ loglikpenal <- function (param, X, Sl = NULL, H = NULL, minusloglik = TRUE) {
   } else {
     ev <- eigen(Sl)$values
     logSl <- log(prod(ev[ev > 0]))
-    penalty <- (t(beta) %*% Sl %*% beta)/2
+    penalty <- (t(beta[-1]) %*% Sl %*% beta[-1])/2
   }
   
   if (!is.null(H)) {
@@ -50,7 +39,7 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
   xl <- min(hp); xu <- max(hp); xr <- xu - xl
   xl <- xl - 0.001*xr; xu <- xu + 0.001*xr
 
-  X <- model.matrix(mpg ~ splines::bs(hp, df = df, Boundary.knots = c(xl,xu), intercept = TRUE))
+  X <- model.matrix(mpg ~ 0 + splines::bs(hp, df = df, Boundary.knots = c(xl,xu), intercept = TRUE))
   
   lambda.new <- lambda.init
   
@@ -80,11 +69,11 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
     
     beta <- beta.fit$par
     
-    V <- solve(beta.fit$hessian + Sl)
+    V <- solve(beta.fit$hessian[-1,-1] + Sl)
     
     trSSj <- sum(diag(Sl.inv %*% S))
     trVS <- sum(diag(V %*% S))
-    bSb <- t(beta) %*% S %*% beta
+    bSb <- t(beta[-1]) %*% S %*% beta[-1]
     
     
     # Update lambdas
@@ -100,8 +89,8 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
     
     # Assess whether update is an increase in the log-likelihood
     # If not, apply step length control
-    l1 <- loglikpenal(param = beta, X = X, Sl = Sl.new, H = beta.fit$hessian, minusloglik = FALSE)
-    l0 <- loglikpenal(param = beta, X = X, Sl = Sl, H = beta.fit$hessian, minusloglik = FALSE)
+    l1 <- loglikpenal(param = beta, X = X, Sl = Sl.new, H = beta.fit$hessian[-1,-1], minusloglik = FALSE)
+    l0 <- loglikpenal(param = beta, X = X, Sl = Sl, H = beta.fit$hessian[-1,-1], minusloglik = FALSE)
     
     k = 1 # Step length
     
@@ -109,7 +98,7 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
       if(max.step < 1.5) { # Consider step extension
         lambda2 <- pmin(update*lambda*k*2, exp(12))
         Sl2 <- lambda2*S
-        l3 <- loglikpenal(param = beta, X = X, Sl = Sl2, H = beta.fit$hessian, minusloglik = FALSE)
+        l3 <- loglikpenal(param = beta, X = X, Sl = Sl2, H = beta.fit$hessian[-1,-1], minusloglik = FALSE)
         
       if (l3 > l1) { # Improvement - accept extension
         lambda.new <- lambda2
@@ -121,7 +110,7 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
         k <- k/2 ## Contract step
         lambda3 <- pmin(update*lambda*k, lambda.max)
         Sl.new <- lambda3*S
-        lk <- loglikpenal(param = beta, X = X, Sl = Sl.new, H = beta.fit$hessian, minusloglik = FALSE)
+        lk <- loglikpenal(param = beta, X = X, Sl = Sl.new, H = beta.fit$hessian[-1,-1], minusloglik = FALSE)
       }
     }
     
