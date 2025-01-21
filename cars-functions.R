@@ -143,6 +143,6 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
   return(list(
     beta = beta,
     lambda = lambda.new,
-    iterations = iter,
+    iter = iter,
     history = score))
 }

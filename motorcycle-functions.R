@@ -5,7 +5,6 @@
 loglikpenal <- function (param, X, Sl = NULL, H = NULL, minusloglik = TRUE) {
   
   beta <- param
-  df <- length(param)
   
   if (is.null(Sl)) {
     logSl <- 0
@@ -14,7 +13,7 @@ loglikpenal <- function (param, X, Sl = NULL, H = NULL, minusloglik = TRUE) {
   } else {
     ev <- eigen(Sl)$values
     logSl <- log(prod(ev[ev > 0]))
-    penalty <- (t(beta) %*% Sl %*% beta)/2
+    penalty <- (t(beta[-1]) %*% Sl %*% beta[-1])/2
   }
   
   if (!is.null(H)) {
@@ -23,7 +22,7 @@ loglikpenal <- function (param, X, Sl = NULL, H = NULL, minusloglik = TRUE) {
   
   sign <- ifelse(isTRUE(minusloglik), -1, 1)
   
-  ll <- sum(dnorm(accel, mean = X %*% beta, sd = sqrt(517.5197), log = TRUE)) - penalty  + logSl/2 - logdetH/2
+  ll <- sum(dnorm(accel, mean = X %*% beta, sd = sqrt(514), log = TRUE)) - penalty  + logSl/2 - logdetH/2
   
   # logL <- dnorm(accel - X %*% beta, mean = 0, sd = sigma, log = TRUE)
   
@@ -35,13 +34,13 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
   
   tiny <- .Machine$double.eps^0.5
   
-  df <- ncol(S)
+  df <- ncol(S) + 1
   
   # Positioning of the boundary knots
   xl <- min(times); xu <- max(times); xr <- xu - xl
   xl <- xl - 0.001*xr; xu <- xu + 0.001*xr
   
-  X <- model.matrix(accel ~ 0 + splines::bs(times, df = df, Boundary.knots = c(xl,xu)))
+  X <- model.matrix(accel ~ 0 + splines::bs(times, df = df, Boundary.knots = c(xl,xu), intercept = TRUE))
   
   # xr <- max(times) - min(times)
   # boundary <- c(min(times) - 0.001*xr, max(times) + 0.001*xr)
@@ -54,8 +53,7 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
   # Initial values
   init.fit <- gam(accel ~ s(times, k = df), optimizer = "efs")
   beta <- init.fit$coef
-  
-  
+
   
   print("Extended Fellner-Schall method:")
   
@@ -77,11 +75,11 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
     
     beta <- beta.fit$par
     
-    V <- solve(beta.fit$hessian + Sl)
+    V <- solve(beta.fit$hessian[-1,-1] + Sl)
     
     trSSj <- sum(diag(Sl.inv %*% S))
     trVS <- sum(diag(V %*% S))
-    bSb <- t(beta) %*% S %*% beta
+    bSb <- t(beta[-1]) %*% S %*% beta[-1]
     
     
     # Update lambdas
@@ -97,8 +95,8 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
     
     # Assess whether update is an increase in the log-likelihood
     # If not, apply step length control
-    l1 <- loglikpenal(param = beta, X = X, Sl = Sl.new, H = beta.fit$hessian, minusloglik = FALSE)
-    l0 <- loglikpenal(param = beta, X = X, Sl = Sl, H = beta.fit$hessian, minusloglik = FALSE)
+    l1 <- loglikpenal(param = beta, X = X, Sl = Sl.new, H = beta.fit$hessian[-1,-1], minusloglik = FALSE)
+    l0 <- loglikpenal(param = beta, X = X, Sl = Sl, H = beta.fit$hessian[-1,-1], minusloglik = FALSE)
     
     k = 1 # Step length
     
@@ -106,7 +104,7 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
       if(max.step < 1.5) { # Consider step extension
         lambda2 <- pmin(update*lambda*k*2, exp(12))
         Sl2 <- lambda2*S
-        l3 <- loglikpenal(param = beta, X = X, Sl = Sl2, H = beta.fit$hessian, minusloglik = FALSE)
+        l3 <- loglikpenal(param = beta, X = X, Sl = Sl2, H = beta.fit$hessian[-1,-1], minusloglik = FALSE)
         
         if (l3 > l1) { # Improvement - accept extension
           lambda.new <- lambda2
@@ -118,7 +116,7 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
         k <- k/2 ## Contract step
         lambda3 <- pmin(update*lambda*k, lambda.max)
         Sl.new <- lambda3*S
-        lk <- loglikpenal(param = beta, X = X, Sl = Sl.new, H = beta.fit$hessian, minusloglik = FALSE)
+        lk <- loglikpenal(param = beta, X = X, Sl = Sl.new, H = beta.fit$hessian[-1,-1], minusloglik = FALSE)
       }
     }
     
@@ -136,11 +134,11 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
     print(paste0("Iteration ", iter,
                  ": k = ", k,
                  " lambda = ", lambda.new,
-                 " Score increase = ", score[iter] - score[iter-1],
+                 " Score increase = ", ifelse(iter == 1, 0, score[iter] - score[iter-1]),
                  " REML = ", score[iter]))
     
     # Break procedure if REML change and step size are too small
-    if (iter > 3 && max.step < 1 && max(abs(diff(score[(iter-3):iter]))) < .5) {print("Converged"); break} 
+    if (iter > 3 && max.step < 0.01 && max(abs(diff(score[(iter-3):iter]))) < .5) {print("Converged"); break} 
     # Or break is likelihood does not change
     if (l1 == l0) break
     
@@ -148,9 +146,12 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
     
   } # End of for loop
   
+  edf <- sum(diag(V %*% beta.fit$hessian[-1,-1]))
+  
   return(list(
     beta = beta,
     lambda = lambda.new,
+    edf = edf,
     iterations = iter,
     history = score))
 }

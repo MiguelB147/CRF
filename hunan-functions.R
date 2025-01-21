@@ -322,6 +322,8 @@ derivatives <- function(coef.vector, degree, datalist, S.lambda = NULL, gradient
 SimData <- function (K, df, degree, unif.ub) {
   set.seed(123)
   # set.seed(123)
+  
+
   u1 <- runif(K, 0, 1)
   u2 <- runif(K, 0, 1)
   
@@ -332,22 +334,33 @@ SimData <- function (K, df, degree, unif.ub) {
   T1 <- -log(u1)
   T2 <- -log(log(a/(a+(1-alpha)*u2),base = alpha))
   
-  # Hu 2011
-  C1 <- runif(K, 0, unif.ub) # 40% censoring
-  C2 <- runif(K, 0, unif.ub) # 40% censoring
-  
-  X1 <- pmin(T1,C1)
-  X2 <- pmin(T2,C2)
-  
-  X <- as.matrix(cbind(X1,X2))
-  
-  delta1 <- 1*(T1 <= C1)
-  delta2 <- 1*(T2 <= C2)
+  if (is.null(unif.ub)) {
+    # Fan 2000
+    X1 <- -log(u1)
+    X2 <- -log(log(a/(a+(1-alpha)*u2),base = alpha))
+    
+    X <- as.matrix(cbind(X1,X2))
+    
+    delta1 <- delta2 <- rep(1, K)
+    
+  } else {
+    # Hu 2011
+    C1 <- runif(K, 0, unif.ub)
+    C2 <- runif(K, 0, unif.ub)
+    
+    X1 <- pmin(T1,C1)
+    X2 <- pmin(T2,C2)
+    
+    X <- as.matrix(cbind(X1,X2))
+    
+    delta1 <- 1*(T1 <= C1)
+    delta2 <- 1*(T2 <= C2)
+  }
   
   delta <- as.matrix(cbind(delta1,delta2))
   
   # NOTE max+1 in geval van unif.ub = 5 geeft gradient=0 voor redelijk veel betas.
-  if (unif.ub < 5) {
+  if (!is.null(unif.ub) && unif.ub < 5) {
     knots1 <- seq(min(X1)-1, max(X1)+1, length.out = df - degree + 2)
     knots2 <- seq(min(X2)-1, max(X2)+1, length.out = df - degree + 2)
   } else {
@@ -985,9 +998,10 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
           minusLogLik = FALSE,
           datalist = datalist
         )
-      } if (l3 > l1) { # Improvement - accept extension
+      if (l3 > l1) { # Improvement - accept extension
         lambda.new <- lambda2
-      } else lambda.new <- lambda.new # Accept old step
+      }
+      }
     } else { # No improvement
         while (l1 < l0) {
           k <- k/2 ## Contract step
