@@ -41,20 +41,6 @@ for (j in 1:length(fit$estimate)) {
   }
 }
 
-# cl <- makeCluster(detectCores()-1)
-# registerDoParallel(cl)
-# 
-# ll <- foreach(j = 1:length(fit$estimate), .combine = 'cbind', .packages = c("splines", "Rcpp2doParallel")) %:%
-#   foreach(i = 1:length(try), .combine = 'rbind') %dopar% {
-#     
-#     coef <- fit$estimate
-#     coef[j] <- try[i]
-#     loglikCpp(coef.vector = coef, degree = degree, df = df, datalist = datalist)
-#     
-#   }
-# 
-# stopCluster(cl)
-
 pdf(paste0("degree",degree,"df",df,".pdf"), paper = "a4")
 for (i in 1:ncol(ll)) {
   plot(try, ll[,i], type = "l", lwd = 2, ylab = "-log-likelihood", xlab = paste0("beta",i))
@@ -62,5 +48,15 @@ for (i in 1:ncol(ll)) {
 }
 dev.off()
 
-library(plot3D)
+betas <- expand.grid(try,try)
+ll.surf <- rep(NA, nrow(betas))
+coef <- fit$estimate
+for (i in 1:nrow(betas)) {
+  coef[1] <- betas[1,]
+  coef[2] <- betas[2,]
+  ll.surf[i] <- loglikCpp(coef.vector = coef, degree = degree, df = df, datalist = datalist)
+}
+
+library(plotly)
+plot_ly(x = betas[,1], y = betas[,2], z = ll.surf)
 
