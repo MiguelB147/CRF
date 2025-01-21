@@ -7,7 +7,7 @@ source('hunan-functions.R')
 sourceCpp('test.cpp')
 
 degree = 2
-df = 5
+df = 8
 K <- 1000
 unif.ub <- NULL # NULL = no censoring, 5 = 20% censoring, 2.3 = 40% censoring
 
@@ -28,16 +28,16 @@ try <- seq(-4,4, 0.01)
 
 pb <- progress_bar$new(
   format = "Simulation = [:bar] :percent [Elapsed time: :elapsedfull | Estimated time remaining: :eta]",
-  total = length(fit$estimate),
-  clear = FALSE)
+  total = length(fit$estimate)*length(try),
+  clear = TRUE)
 
 ll <- matrix(nrow = length(try), ncol = length(fit$estimate))
 for (j in 1:length(fit$estimate)) {
-  pb$tick()
   for (i in 1:length(try)) {
     coef <- fit$estimate
     coef[j] <- try[i]
     ll[i,j] <- loglikCpp(coef.vector = coef, degree = degree, df = df, datalist = datalist)
+    pb$tick()
   }
 }
 
@@ -58,6 +58,9 @@ for (j in 1:length(fit$estimate)) {
 pdf(paste0("degree",degree,"df",df,".pdf"), paper = "a4")
 for (i in 1:ncol(ll)) {
   plot(try, ll[,i], type = "l", lwd = 2, ylab = "-log-likelihood", xlab = paste0("beta",i))
+  abline(v = fit$estimate[i], col = "red")
 }
 dev.off()
+
+library(plot3D)
 
