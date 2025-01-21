@@ -5,21 +5,18 @@ attach(mcycle)
 
 source("motorcycle-functions.R")
 
-gam.fit <- gam(accel ~ s(times, k = 30, bs = "ps", sp = 0))
+gam.fit <- gam(accel ~ s(times, k = 40, bs = "bs"))
 gam.fit$sp
 gam.fit$sig2
 
-df <- 30
+df <- 40
 
 S <- crossprod(diff(diag(df), differences = 2))
 
 # Positioning of the knots
-nk <- df - 3 + 1# Number of knots
 xl <- min(times); xu <- max(times); xr <- xu - xl
 xl <- xl - 0.001*xr; xu <- xu + 0.001*xr
-k <- seq(xl, xu, length = nk)
-
-X <- model.matrix(accel ~ splines::bs(times, knots = k[-c(1,length(k))], Boundary.knots = k[c(1, length(k))]))
+X <- model.matrix(accel ~ 0 + splines::bs(times, df = df, Boundary.knots = c(xl,xu)))
 
 fit <- EstimatePenal(S)
 y.fit <- X %*% fit$beta

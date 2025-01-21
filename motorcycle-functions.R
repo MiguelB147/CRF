@@ -37,13 +37,11 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
   
   df <- ncol(S)
   
-  # Positioning of the knots
-  nk <- df - 3 + 1# Number of knots
+  # Positioning of the boundary knots
   xl <- min(times); xu <- max(times); xr <- xu - xl
   xl <- xl - 0.001*xr; xu <- xu + 0.001*xr
-  k <- seq(xl, xu, length = nk)
   
-  X <- model.matrix(accel ~ splines::bs(times, knots = k[-c(1,length(k))], Boundary.knots = k[c(1, length(k))]))
+  X <- model.matrix(accel ~ 0 + splines::bs(times, df = df, Boundary.knots = c(xl,xu)))
   
   # xr <- max(times) - min(times)
   # boundary <- c(min(times) - 0.001*xr, max(times) + 0.001*xr)
@@ -142,7 +140,7 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
                  " REML = ", score[iter]))
     
     # Break procedure if REML change and step size are too small
-    if (iter > 3 && max.step < 1 && max(abs(diff(score[(iter-3):iter]))) < .5) break
+    if (iter > 3 && max.step < 1 && max(abs(diff(score[(iter-3):iter]))) < .5) {print("Converged"); break} 
     # Or break is likelihood does not change
     if (l1 == l0) break
     
