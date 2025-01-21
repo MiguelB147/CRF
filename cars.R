@@ -18,7 +18,7 @@ fit.gam$sp
 df <- 10
 S <- crossprod(diff(diag(df-1), differences = 1))
 
-test <- EstimatePenal(S = S, lambda.init = 10)
+test <- EstimatePenal(S = S, lambda.init = 1)
 
 xl <- min(hp); xu <- max(hp); xr <- xu - xl
 xl <- xl - 0.001*xr; xu <- xu + 0.001*xr
