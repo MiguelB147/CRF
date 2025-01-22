@@ -31,20 +31,13 @@ try <- seq(-4,4, 0.01)
 
 pb <- progress_bar$new(
   format = "Simulation = [:bar] :percent [Elapsed time: :elapsedfull | Estimated time remaining: :eta]",
-<<<<<<< HEAD
   total = length(try)*length(fit$estimate),
-=======
-  total = length(fit$estimate)*length(try),
->>>>>>> d258da2dfbe7954f445309d1e21235df3f123b7a
   clear = TRUE)
 
 ll <- matrix(nrow = length(try), ncol = length(fit$estimate))
 for (j in 1:length(fit$estimate)) {
   for (i in 1:length(try)) {
-<<<<<<< HEAD
     pb$tick()
-=======
->>>>>>> d258da2dfbe7954f445309d1e21235df3f123b7a
     coef <- fit$estimate
     coef[j] <- try[i]
     ll[i,j] <- loglikCpp(coef.vector = coef, degree = degree, df = df, datalist = datalist)
@@ -52,7 +45,6 @@ for (j in 1:length(fit$estimate)) {
   }
 }
 
-<<<<<<< HEAD
 # cl <- makeCluster(detectCores()-1)
 # registerDoParallel(cl)
 # 
@@ -69,9 +61,7 @@ for (j in 1:length(fit$estimate)) {
 
 # pdf(paste0("degree",degree,"df",df,".pdf"), paper = "a4")
 pdf("test.pdf", paper = "a4")
-=======
-pdf(paste0("degree",degree,"df",df,".pdf"), paper = "a4")
->>>>>>> d258da2dfbe7954f445309d1e21235df3f123b7a
+# pdf(paste0("degree",degree,"df",df,".pdf"), paper = "a4")
 for (i in 1:ncol(ll)) {
   plot(try, ll[,i], type = "l", lwd = 2, ylab = "-log-likelihood", xlab = paste0("beta",i))
   abline(v = fit$estimate[i], col = "red")
