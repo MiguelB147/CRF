@@ -19,7 +19,7 @@ penaltyfunc <- function(coef.vector, degree, df, Sl, datalist) {
 }
 
 S <- list(Srow(df), Scol(df))
-Sl <- 5*(S[[1]] + S[[2]])
+Sl <- 20*(S[[1]] + S[[2]])
 
 fit <- nlm(f = penaltyfunc,
            p = rep(1,df^2),
@@ -27,7 +27,8 @@ fit <- nlm(f = penaltyfunc,
            df = df,
            Sl = Sl,
            datalist = datalist,
-           hessian = TRUE)
+           hessian = TRUE,
+           steptol = 1e-10)
 fit$estimate
 fit$hessian
 
@@ -47,7 +48,6 @@ for (j in 1:length(fit$estimate)) {
     coef <- fit$estimate
     coef[j] <- try[i]
     ll[i,j] <- penaltyfunc(coef.vector = coef, degree = degree, df = df, Sl = Sl, datalist = datalist)
-    pb$tick()
   }
 }
 
@@ -66,7 +66,7 @@ for (j in 1:length(fit$estimate)) {
 # stopCluster(cl)
 
 # pdf(paste0("degree",degree,"df",df,".pdf"), paper = "a4")
-pdf("testpenalty.pdf", paper = "a4")
+pdf("testpenalty20.pdf", paper = "a4")
 # pdf(paste0("degree",degree,"df",df,".pdf"), paper = "a4")
 for (i in 1:ncol(ll)) {
   plot(try, ll[,i], type = "l", lwd = 2, ylab = "-log-likelihood", xlab = paste0("beta",i))
