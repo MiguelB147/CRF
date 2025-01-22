@@ -1,7 +1,6 @@
 library(splines)
 library(Rcpp)
 library(progress)
-library(doParallel)
 
 source('hunan-functions.R')
 sourceCpp('test.cpp')
@@ -28,13 +27,13 @@ try <- seq(-4,4, 0.01)
 
 pb <- progress_bar$new(
   format = "Simulation = [:bar] :percent [Elapsed time: :elapsedfull | Estimated time remaining: :eta]",
-  total = nsim,
-  clear = FALSE)
+  total = length(try)*length(fit$estimate),
+  clear = TRUE)
 
 ll <- matrix(nrow = length(try), ncol = length(fit$estimate))
 for (j in 1:length(fit$estimate)) {
   for (i in 1:length(try)) {
-    pb$tick
+    pb$tick()
     coef <- fit$estimate
     coef[j] <- try[i]
     ll[i,j] <- loglikCpp(coef.vector = coef, degree = degree, df = df, datalist = datalist)
@@ -55,7 +54,8 @@ for (j in 1:length(fit$estimate)) {
 # 
 # stopCluster(cl)
 
-pdf(paste0("degree",degree,"df",df,".pdf"), paper = "a4")
+# pdf(paste0("degree",degree,"df",df,".pdf"), paper = "a4")
+pdf("test.pdf", paper = "a4")
 for (i in 1:ncol(ll)) {
   plot(try, ll[,i], type = "l", lwd = 2, ylab = "-log-likelihood", xlab = paste0("beta",i))
 }
