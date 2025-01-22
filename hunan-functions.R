@@ -189,6 +189,7 @@ derivatives <- function(coef.vector, degree, datalist, S.lambda = NULL, gradient
                           logtheta = logtheta2,
                           df = df,
                           delta = datalist$delta.prod,
+                          deriv = deriv,
                           I1 = datalist$I1,
                           I2 = datalist$I2,
                           I3 = datalist$I5,
@@ -204,7 +205,8 @@ derivatives <- function(coef.vector, degree, datalist, S.lambda = NULL, gradient
                         df = df,
                         delta = t(datalist$delta.prod),
                         I1 = datalist$I1,
-                        I2 = datalist$I2) # hessianC returns matrix of second derivatives of -loglik
+                        I2 = datalist$I2,
+                        I3 = datalist$I5) # hessianC returns matrix of second derivatives of -loglik
     
   } else {hessian <- NA}
   

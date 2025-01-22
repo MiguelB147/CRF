@@ -19,7 +19,7 @@ penaltyfunc <- function(coef.vector, degree, df, Sl, datalist) {
 }
 
 S <- list(Srow(df), Scol(df))
-Sl <- 20*(S[[1]] + S[[2]])
+Sl <- 5*(S[[1]] + S[[2]])
 
 fit <- nlm(f = penaltyfunc,
            p = rep(1,df^2),
@@ -32,9 +32,11 @@ fit <- nlm(f = penaltyfunc,
 fit$estimate
 fit$hessian
 
+# test <- derivatives(coef.vector = fit$estimate, degree = degree, datalist = datalist, S.lambda = Sl, hessian = FALSE, gradient = TRUE)$gradient
+
 sum(apply(fit$hessian, 2, function(x) all(x == 0)))
 
-try <- seq(-4,4, 0.01)
+try <- seq(-3,3, 0.05)
 
 pb <- progress_bar$new(
   format = "Simulation: [:bar] :percent [Elapsed time: :elapsedfull | Estimated time remaining: :eta]",
@@ -66,7 +68,7 @@ for (j in 1:length(fit$estimate)) {
 # stopCluster(cl)
 
 # pdf(paste0("degree",degree,"df",df,".pdf"), paper = "a4")
-pdf("testpenalty20.pdf", paper = "a4")
+pdf("degree2df8penalty5.pdf", paper = "a4")
 # pdf(paste0("degree",degree,"df",df,".pdf"), paper = "a4")
 for (i in 1:ncol(ll)) {
   plot(try, ll[,i], type = "l", lwd = 2, ylab = "-log-likelihood", xlab = paste0("beta",i))

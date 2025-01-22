@@ -133,7 +133,7 @@ double logLikC(const NumericMatrix riskset,
   return(-sum);
 }
 
-
+// [[Rcpp::export]]
 NumericVector gradientC(const NumericMatrix riskset,
                         const NumericMatrix logtheta,
                         const Rcpp::List deriv,
