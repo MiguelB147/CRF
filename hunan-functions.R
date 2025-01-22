@@ -361,17 +361,17 @@ SimData <- function (K, df, degree, unif.ub) {
   
   # NOTE max+1 in geval van unif.ub = 5 geeft gradient=0 voor redelijk veel betas.
   if (!is.null(unif.ub) && unif.ub < 5) {
-    qq1 <- quantile(X1, probs = seq(0,1,length = df - degree + 2))
+    qq1 <- quantile(X1[delta1 == 1], probs = seq(0,1,length = df - degree + 2))
     knots1 <- c(min(X1)-1, qq1[-c(1,length(qq1))], max(X1)+1)
-    qq2 <- quantile(X2, probs = seq(0,1,length = df - degree + 2))
+    qq2 <- quantile(X2[delta2 == 1], probs = seq(0,1,length = df - degree + 2))
     knots2 <- c(min(X2)-1, qq1[-c(1,length(qq2))], max(X2)+1)
     
     # knots1 <- seq(min(X1)-1, max(X1)+1, length.out = df - degree + 2)
     # knots2 <- seq(min(X2)-1, max(X2)+1, length.out = df - degree + 2)
   } else {
-    qq1 <- quantile(X1, probs = seq(0,1,length = df - degree + 2))
+    qq1 <- quantile(X1[delta1 == 1], probs = seq(0,1,length = df - degree + 2))
     knots1 <- c(min(X1)-1, qq1[-c(1,length(qq1))], max(X1))
-    qq2 <- quantile(X2, probs = seq(0,1,length = df - degree + 2))
+    qq2 <- quantile(X2[delta2 == 1], probs = seq(0,1,length = df - degree + 2))
     knots2 <- c(min(X2)-1, qq1[-c(1,length(qq2))], max(X2))
     
     # knots1 <- seq(min(X1)-1, max(X1), length.out = df - degree + 2)
