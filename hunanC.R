@@ -158,15 +158,52 @@ dev.off()
 
 # Fellner - Schall method ----
 
+library(splines)
+library(Rcpp)
+
 source('hunan-functions.R')
 sourceCpp('test.cpp')
 
+degree = 2
+df = 6
+K <- 2000
+unif.ub <- NULL # 5 = 20% censoring, 2.3 = 40% censoring
+
+datalist <- SimData(K = K, df = df, degree = degree, unif.ub = unif.ub)
+
 S <- list(Srow(df), Scol(df))
+lambda <- c(0.5,0.5)
+Sl<- lambda[1]*S[[1]] + lambda[2]*S[[2]]
 
-fit <- EstimatePenalty(datalist = datalist, degree = degree, S = S, lambda.init = c(20,20))
-fit <- EstimatePenaltyNoControl(datalist = datalist, degree = degree, S = S, lambda.init = c(10,10))
 fit <- EstimatePenalAsym(datalist = datalist, degree = degree, S = S, lambda.init = c(1,1))
+fit <- nlm(f = wrapper, p = rep(1,df^2), degree = degree, datalist = datalist, Sl = Sl)
 
+plot.grid <- expand.grid(seq(0.25,1.5,by=0.25), seq = seq(0.1,2.2,by = 0.05))
+names(plot.grid) <- c("time1","time2")
+plot.grid$true <- theta.frank(plot.grid$time1,plot.grid$time2, alpha = 0.0023)
+# CRF <- mapply(function(x,y) exp(tensor(x,y, coef.vector = fit$beta,
+#                                        degree = degree, df = df, knots = datalist$knots)),
+#               plot.grid$time1,
+#               plot.grid$time2)
+CRF <- mapply(function(x,y) exp(tensor(x,y, coef.vector = fit$estimate,
+                                       degree = degree, df = df, knots = datalist$knots)),
+              plot.grid$time1,
+              plot.grid$time2)
+
+
+par(mfrow = c(2,3))
+for (i in unique(plot.grid$time1)) {
+  
+  plottext <- paste0("t[1] == ", i)
+  plot(x = plot.grid$time2[plot.grid$time1 == i],
+       y = CRF[plot.grid$time1 == i],
+       type = 'l', lwd = 2,
+       ylab = "CRF", xlab = expression(t[2]), main = parse(text = plottext),
+       ylim = c(0,7))
+  lines(x = plot.grid$time2[plot.grid$time1 == i], y = plot.grid$true[plot.grid$time1 == i], col = "red")
+  
+}
+par(mfrow = c(1,1))
 
 MatToVec <- function(Matrix) {
   

@@ -1,23 +1,36 @@
 #include <cmath>
-#include <Rcpp.h>
+#include <RcppArmadillo.h>
 
 using namespace Rcpp;
+using namespace arma;
 
-// This is a simple example of exporting a C++ function to R. You can
-// source this function into an R session using the Rcpp::sourceCpp 
-// function (or via the Source button on the editor toolbar). Learn
-// more about Rcpp at:
-//
-//   http://www.rcpp.org/
-//   http://adv-r.had.co.nz/Rcpp.html
-//   http://gallery.rcpp.org/
-//
+// [[Rcpp::depends(RcppArmadillo)]]
 
-// You can include R code blocks in C++ files processed with sourceCpp
-// (useful for testing and development). The R code will be automatically 
-// run after the compilation.
-//
+// [[Rcpp::export]]
+NumericVector Simulation(const NumericMatrix grid,
+                         const NumericMatrix Srow,
+                         const NumericMatrix Scol,
+                         const int nsim) {
+  
+  int nbeta = Srow.ncol();
+  
+  NumericVector ll(nsim);
+  NumericVector llavg(grid.nrow());
+  arma::vec mean(nbeta, fill::zeros);
+  arma::mat Sl(nbeta,nbeta);
+  arma::mat Slinv(nbeta,nbeta);
 
+  for (int i=0; i < grid.nrow(); i++) {
+    Sl = grid(i,1)*Srow + grid(i,2)*Scol;
+    Slinv = arma::pinv(Sl);
+    
+    for (int j=0; j < nsim; j++) {
+      arma::vec mvnrnd(mean, Slinv);
+    }
+  }
+  
+  return llavg;
+}
 
 // [[Rcpp::export]]
 NumericMatrix IndGreater(NumericVector x) {

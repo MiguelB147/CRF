@@ -525,37 +525,30 @@ lambdaUpdate <- function(lambda.old, S.lambda.inv, S, V, beta) {
   
 }
 
-wrapper <- function(coef.vector, degree, datalist, lambda = c(1,1), S = NULL, H = NULL, minusLogLik=TRUE) {
+wrapper <- function(coef.vector, degree, datalist, Sl = NULL, H = NULL, minusLogLik=TRUE) {
   
   # Check whether penalty is applied
-  if (is.null(S)) {
-    penaltyLik <- penaltyGrad <- penaltyHess <- 0
+  if (is.null(Sl)) {
+    penaltyLik <- logSl <- logdetH <- 0
   } else {
-    
-    Sl <- lambda[1]*S[[1]] + lambda[2]*S[[2]]
 
     # Calculate penalty terms for log f_lambda(y,beta) Wood (2017) p.1076 
     Sl.eigenv <- eigen(Sl)$values
     
     penaltyLik <- (t(coef.vector) %*% Sl %*% coef.vector)/2
     logSl <- log(prod(Sl.eigenv[Sl.eigenv > 0]))
-    constant <- sum(Sl.eigenv == 0)*log(2*pi)/2 # Zie Wood (2016) p.1550
+    # constant <- sum(Sl.eigenv == 0)*log(2*pi)/2 # Zie Wood (2016) p.1550
     
     # penaltyGrad <- t(t(coef.vector) %*% S.lambda)
     # penaltyHess <- S.lambda
   }
   
   # TODO implement sanity check that !is.null(S.lambda) & !is.null(H) & minusLogLik=FALSE implies laplace likelihood
-  if (is.null(H)) {
-    logdetH <- 0
-  } else {
-    logdetH <- log(det(H))
-    logSl <- logSl/2
-  }
+  if (!is.null(H)) {
+    logdetH <- log(det(H + Sl))
+  } else logdetH <- 0
   
-  df <- sqrt(length(coef.vector))
-  
-  logtheta2 <- tensor(datalist$X[,1], datalist$X[,2], degree = degree, coef.vector = coef.vector, df = df, knots = datalist$knots)
+  logtheta2 <- tensor(datalist$X[,1], datalist$X[,2], degree = degree, coef.vector = coef.vector, df = sqrt(length(coef.vector)), knots = datalist$knots)
   
   # List of gradient matrices for every spline coefficient
   # M <- diag(df^2)
@@ -577,7 +570,7 @@ wrapper <- function(coef.vector, degree, datalist, lambda = c(1,1), S = NULL, H 
                 delta = datalist$delta.prod,
                 I1 = datalist$I1,
                 I2 = datalist$I2,
-                I3 = datalist$I5) + penaltyLik - logS.lambda + logdetH - constant
+                I3 = datalist$I5) + penaltyLik - logSl/2 + logdetH/2
   
   
   # gradient <- gradientC(riskset = datalist$riskset,
@@ -949,16 +942,16 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
     beta.fit <- nlm(f = wrapper,
                     p = beta,
                     degree = degree,
-                    lambda = lambda,
-                    S = S,
+                    Sl = Sl,
                     datalist = datalist,
-                    hessian = FALSE)
+                    hessian = TRUE)
     
     # New betas to be used as initial values for possible next iteration
     beta <- beta.fit$estimate
     
     # Make sure that hessian is positive definite
-    hessian <- derivatives(coef.vector = beta, degree = degree, datalist = datalist)$hessian
+    # hessian <- derivatives(coef.vector = beta, degree = degree, datalist = datalist)$hessian
+    
     decomp <- eigen(beta.fit$hessian)
     A <- diag(abs(decomp$values))
     hessian <- decomp$vectors %*% A %*% t(decomp$vectors)
@@ -967,7 +960,7 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
     V <- solve(hessian + Sl)
     
     # Calculate trSSj, trVS and bSb
-    trSSj <- trVS <- bSb <- c()
+    trSSj <- trVS <- bSb <- rep(NA, length(S))
     for (i in length(S)) {
       trSSj[i] <- sum(diag(Sl.inv %*% S[[i]]))
       trVS[i] <- sum(diag(V %*% S[[i]]))
@@ -991,22 +984,21 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
     l1 <- wrapper(
       coef.vector = beta,
       degree = degree,
-      lambda = lambda.new,
-      S = S, # TODO Na te gaan of dit oude Sl moet zijn
-      H = hessian + S.lambda, # Denk dat dit hessian + S.lambda moet zijn ipv hessian + S.lambda.new
+      Sl = Sl.new, # TODO Na te gaan of dit oude Sl moet zijn
+      H = hessian, # Denk dat dit hessian + S.lambda moet zijn ipv hessian + S.lambda.new
       minusLogLik = FALSE,
       datalist = datalist
     )
     
-    l0 <- wrapper(coef.vector = beta ,degree = degree, lambda = lambda, S = S, H = hessian + Sl, minusLogLik = FALSE, datalist = datalist)
+    l0 <- wrapper(coef.vector = beta, degree = degree, Sl = Sl, H = hessian, minusLogLik = FALSE, datalist = datalist)
 
     k = 1 # Step length
     
     if (l1 >= l0) { # Improvement
       if(max.step < 1.5) { # Consider step extension
         lambda2 <- pmin(update*lambda*k*7, exp(12))
-        l3 <- wrapper(coef.vector = beta, degree = degree, lambda = lambda2, S = S,
-          H = hessian + Sl, # Denk dat dit hessian + S.lambda moet zijn ipv hessian + S.lambda.new
+        l3 <- wrapper(coef.vector = beta, degree = degree, Sl = lambda2[1]*S1 + lambda2[2]*S2,
+          H = hessian, # Denk dat dit hessian + S.lambda moet zijn ipv hessian + S.lambda.new
           minusLogLik = FALSE,
           datalist = datalist
         )
@@ -1015,23 +1007,25 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
       }
       }
     } else { # No improvement
-        while (l1 < l0) {
+      lk <- l1
+        while (lk < l0 && k > 0.001) { # Don't contract too much since the likelihood does not need to increase
           k <- k/2 ## Contract step
           lambda3 <- pmin(update*lambda*k, lambda.max)
-          l1 <- wrapper(coef.vector = beta, degree = degree, lambda = lambda3, S = S, H = hessian + Sl, minusLogLik = FALSE, datalist = datalist)
+          l1 <- wrapper(coef.vector = beta, degree = degree, Sl = lambda3[1]*S1 + lambda3[2]*S2, H = hessian, minusLogLik = FALSE, datalist = datalist)
         }
       }
       
     # If step length control is needed, update lambda accordingly
-    if(k < 1) {
+    if(k < 1 && k > 0.001) {
       lambda.new <- lambda3
+      l1 <- lk
       max.step <- max(abs(lambda.new - lambda))}
 
-    #save loglikelihood value
+    # save loglikelihood value
     score[iter] <- l1
     
-    # Sanity check: lambda must be positive
-    if (sum(lambda.new < 0) > 0) {stop("At least 1 lambda is negative")}
+    # # Sanity check: lambda must be positive
+    # if (sum(lambda.new < 0) > 0) {stop("At least 1 lambda is negative")}
     
     # Break procedure if REML change and step size are too small
     if (iter > 3 && max.step < 1 && max(abs(diff(score[(iter-3):iter]))) < .1) break
