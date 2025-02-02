@@ -1,6 +1,7 @@
 
 library(Rcpp)
 library(splines)
+library(expm)
 
 
 posthoc <- function(grid, MLE, hessian, S) {
