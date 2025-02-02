@@ -16,9 +16,16 @@ posthoc <- function(grid, MLE, hessian, S) {
     Vp <- A %*% V %*% t(A)
     MLEp <- A %*% MLE
     
+    U <- chol(Vinv)
+    N <- length(MLE)
+    
+    
     Dm[i] <- t(MLEp - MLE) %*% Vinv %*% (MLEp - MLE)
-    Dw[i] <- sum((MLEp - MLE)^2) + sum(diag(V + Vp - 2*sqrtm(sqrtm(V) %*% Vp %*% sqrtm(V))))
-    Dw.plot[i] <- sum((MLEp - MLE)^2) + sum(diag(V + diag(Vp) - 2*sqrtm(sqrtm(V) %*% diag(Vp) %*% sqrtm(V))))
+    Dw[i] <- Dm[i] + N + sum(diag(U %*% Vp %*% t(U) - 2*sqrtm(U %*% Vp %*% t(U))))
+    Dw.plot[i] <- Dm[i] + N + sum(diag(U %*% diag(Vp) %*% t(U) - 2*sqrtm(U %*% diag(Vp) %*% t(U))))
+    
+    # Dw[i] <- sum((MLEp - MLE)^2) + sum(diag(V + Vp - 2*sqrtm(sqrtm(V) %*% Vp %*% sqrtm(V))))
+    # Dw.plot[i] <- sum((MLEp - MLE)^2) + sum(diag(V + diag(Vp) - 2*sqrtm(sqrtm(V) %*% diag(Vp) %*% sqrtm(V))))
   }
   
   return(list(Dm = Dm, Dw = Dw, Dw.plot = Dw.plot))
