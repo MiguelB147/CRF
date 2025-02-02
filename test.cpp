@@ -1,11 +1,9 @@
 #include <cmath>
-#include <RcppArmadillo.h>
+#include <Rcpp.h>
 
 using namespace Rcpp;
-using namespace arma;
 
-// [[Rcpp::depends(RcppArmadillo)]]
-
+/*
 // [[Rcpp::export]]
 NumericVector Simulation(const NumericMatrix grid,
                          const NumericMatrix Srow,
@@ -31,6 +29,8 @@ NumericVector Simulation(const NumericMatrix grid,
   
   return llavg;
 }
+ 
+*/
 
 // [[Rcpp::export]]
 NumericMatrix IndGreater(NumericVector x) {
