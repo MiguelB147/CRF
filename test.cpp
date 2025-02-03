@@ -309,12 +309,15 @@ NumericMatrix hessianC(const NumericMatrix riskset,
     for (int i=0; i<n; i++) {
       for (int j=0; j<n; j++) {
         if (riskset(j,i) > 0) {
+          // sum2 = sum2 +
+          //   delta(j,i)*I1(i,j)*(
+          //       -I3(i,j) + 
+          //       I2(i,j)*std::exp(logtheta(j,i))*
+          //       ((1 + pow(deriv_vec[k](j,i),2))*(riskset(j,i) - I2(i,j)) + I2(i,j)*std::exp(logtheta(j,i)))/pow(riskset(j,i) - I2(i,j) + I2(i,j)*(std::exp(logtheta(j,i))),2)
+          //       );
+          
           sum2 = sum2 +
-            delta(j,i)*I1(i,j)*(
-                -I3(i,j) + 
-                I2(i,j)*std::exp(logtheta(j,i))*
-                ((1 + pow(deriv_vec[k](j,i),2))*(riskset(j,i) - I2(i,j)) + I2(i,j)*std::exp(logtheta(j,i)))/pow(riskset(j,i) - I2(i,j) + I2(i,j)*(std::exp(logtheta(j,i))),2)
-                );
+            delta(j,i)*I1(i,j)*I2(i,j)*(1-I3(i,j))*delta(j,i)*(pow(deriv_vec[k](j,i),2))*riskset(j,i)*std::exp(logtheta(j,i))/(riskset(j,i) + I2(i,j)*(std::exp(logtheta(j,i)) - 1));
         } else {sum2 = sum2 + 0;}
       } 
     }

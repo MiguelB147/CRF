@@ -20,10 +20,12 @@ posthoc <- function(grid, MLE, hessian, S) {
     U <- chol(Vinv)
     N <- length(MLE)
     
+    UVpU <- U %*% Vp %*% t(U)
+    UdiagVpU <- U %*% diag(Vp) %*% t(U)
     
     Dm[i] <- t(MLEp - MLE) %*% Vinv %*% (MLEp - MLE)
-    Dw[i] <- Dm[i] + N + sum(diag(U %*% Vp %*% t(U) - 2*sqrtm(U %*% Vp %*% t(U))))
-    Dw.plot[i] <- Dm[i] + N + sum(diag(U %*% diag(Vp) %*% t(U) - 2*sqrtm(U %*% diag(Vp) %*% t(U))))
+    Dw[i] <- Dm[i] + N + sum(diag(UVpU - 2*sqrtm(UVpU)))
+    Dw.plot[i] <- Dm[i] + N + sum(diag(UdiagVpU - 2*sqrtm(UdiagVpU)))
     
     # Dw[i] <- sum((MLEp - MLE)^2) + sum(diag(V + Vp - 2*sqrtm(sqrtm(V) %*% Vp %*% sqrtm(V))))
     # Dw.plot[i] <- sum((MLEp - MLE)^2) + sum(diag(V + diag(Vp) - 2*sqrtm(sqrtm(V) %*% diag(Vp) %*% sqrtm(V))))
@@ -43,7 +45,12 @@ unif.ub <- NULL # 5 = 20% censoring, 2.3 = 40% censoring
 
 datalist <- SimData(K = K, df = df, degree = degree, unif.ub = unif.ub)
 
+
+
 fit <- nlm(f = wrapper, p = rep(1,df^2), degree = degree, datalist = datalist, hessian = TRUE, steptol = 1e-10)
+test <- derivatives(fit$estimate, degree, datalist, gradient = TRUE, hessian = TRUE)
+diag(solve(fit$hessian))
+diag(solve(test$hessian))
 S <- list(Srow(df), Scol(df))
 grid <- expand.grid(seq(0.5,20,0.5), seq(0.5,20,0.5))
 
