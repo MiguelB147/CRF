@@ -175,7 +175,8 @@ S <- list(Srow(df), Scol(df))
 lambda <- c(0.5,0.5)
 Sl<- lambda[1]*S[[1]] + lambda[2]*S[[2]]
 
-fit <- EstimatePenalAsym(datalist = datalist, degree = degree, S = S, lambda.init = c(1,1))
+S <- Srow(df)
+fit <- EstimatePenalAsym(datalist = datalist, degree = degree, S = S, lambda.init = 10)
 fit <- nlm(f = wrapper, p = rep(1,df^2), degree = degree, datalist = datalist, Sl = Sl)
 
 plot.grid <- expand.grid(seq(0.25,1.5,by=0.25), seq = seq(0.1,2.2,by = 0.05))
