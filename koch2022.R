@@ -48,7 +48,19 @@ datalist <- SimData(K = K, df = df, degree = degree, unif.ub = unif.ub)
 
 
 fit <- nlm(f = wrapper, p = rep(1,df^2), degree = degree, datalist = datalist, hessian = TRUE, steptol = 1e-10)
+fit2 <-  optim(par = rep(1,df^2), fn = wrapper, method = "BFGS", degree = degree, datalist = datalist, hessian = TRUE, control = list(reltol = 1e-10))
+fit3 <- nloptr(eval_f = wrapper, x0 = rep(1,df^2), Sl = NULL, H = NULL, minusLogLik = TRUE, degree = degree, datalist = datalist, opts = list(algorithm = "NLOPT_LN_COBYLA", xtol_rel = 1e-10, xtol_abs = 1e-10, maxeval = 1e+05))
+
 test <- derivatives(fit$estimate, degree, datalist, gradient = TRUE, hessian = TRUE)
+test2 <- derivatives(fit2$par, degree, datalist, gradient = TRUE, hessian = TRUE)
+
+library(nloptr)
+
+
+
+head(fit2$hessian)
+head(test2$hessian)
+
 diag(solve(fit$hessian))
 diag(solve(test$hessian))
 S <- list(Srow(df), Scol(df))

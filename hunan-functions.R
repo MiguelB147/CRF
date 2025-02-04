@@ -212,6 +212,7 @@ derivatives <- function(coef.vector, degree, datalist, S.lambda = NULL, gradient
   
   
   return(list(gradient = gradient, hessian = hessian))
+  # return(gradient)
 }
 
 # hessian <- function(coef.vector, degree, df, datalist, lambda) {
@@ -550,11 +551,6 @@ wrapper <- function(coef.vector, degree, datalist, Sl = NULL, H = NULL, minusLog
   
   logtheta2 <- tensor(datalist$X[,1], datalist$X[,2], degree = degree, coef.vector = coef.vector, df = sqrt(length(coef.vector)), knots = datalist$knots)
   
-  # List of gradient matrices for every spline coefficient
-  # M <- diag(df^2)
-  # deriv <- apply(M, 2, tensor,
-  #                t1 = datalist$X[,1], t2 = datalist$X[,2], degree = degree, df = df, knots = datalist$knots,
-  #                simplify = FALSE)
   
   # log f_lambda(y,beta)
   # ll <- logLikC(riskset = datalist$riskset,
@@ -572,6 +568,12 @@ wrapper <- function(coef.vector, degree, datalist, Sl = NULL, H = NULL, minusLog
                 I2 = datalist$I2,
                 I3 = datalist$I5) + penaltyLik - logSl/2 + logdetH/2
   
+  # # List of gradient matrices for every spline coefficient
+  # M <- diag(df^2)
+  # deriv <- apply(M, 2, tensor,
+  #                t1 = datalist$X[,1], t2 = datalist$X[,2], degree = degree, df = df, knots = datalist$knots,
+  #                simplify = FALSE)
+  
   
   # gradient <- gradientC(riskset = datalist$riskset,
   #                      logtheta = logtheta2,
@@ -581,18 +583,19 @@ wrapper <- function(coef.vector, degree, datalist, Sl = NULL, H = NULL, minusLog
   #                      I1 = datalist$I1,
   #                      I2 = datalist$I2,
   #                      I3 = datalist$I5,
-  #                      I4 = datalist$I6) + penaltyGrad
-  
-  # TODO Controleer implementatie van hessian
-  
+  #                      I4 = datalist$I6)
+  # 
+  # # TODO Controleer implementatie van hessian
+  # 
   # hessian <- hessianC(riskset = datalist$riskset,
   #                     logtheta = logtheta2,
   #                     deriv = deriv,
   #                     df = df,
   #                     delta = datalist$delta.prod,
   #                     I1 = datalist$I1,
-  #                     I2 = datalist$I2) + penaltyHess
-  
+  #                     I2 = datalist$I2,
+  #                     I3 = datalist$I5)
+  # 
   # attr(ll, "gradient") <- gradient
   # attr(ll, "hessian") <- hessian
   
@@ -918,10 +921,11 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
   
   tiny <- .Machine$double.eps^0.5
   
-  S1 <- S[[1]]
-  S2 <- S[[2]]
+  # S1 <- S[[1]]
+  # S2 <- S[[2]]
   
-  df <- sqrt(ncol(S1))
+  # df <- sqrt(ncol(S1))
+  df <- sqrt(ncol(S))
   
   lambda.new <- lambda.init # In voorbeelden van Wood (2017) is de initiele lambda = 1
   
@@ -935,19 +939,29 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
     lambda <- lambda.new
     
     # Some calculations to update lambda later...
-    Sl <- lambda[1]*S1 + lambda[2]*S2
+    # Sl <- lambda[1]*S1 + lambda[2]*S2
+    Sl <- lambda*S
     Sl.inv <- MASS::ginv(Sl)
     
     # Estimate betas for given lambdas
-    beta.fit <- nlm(f = wrapper,
-                    p = beta,
+    # beta.fit <- nlm(f = wrapper,
+    #                 p = beta,
+    #                 degree = degree,
+    #                 Sl = Sl,
+    #                 datalist = datalist,
+    #                 hessian = TRUE)
+    
+    beta.fit <- optim(fn = wrapper,
+                    par = beta,
                     degree = degree,
                     Sl = Sl,
                     datalist = datalist,
-                    hessian = TRUE)
+                    hessian = TRUE,
+                    control = list(reltol = 1e-10))
     
     # New betas to be used as initial values for possible next iteration
-    beta <- beta.fit$estimate
+    # beta <- beta.fit$estimate
+      beta <- beta.fit$par
     
     # Make sure that hessian is positive definite
     # hessian <- derivatives(coef.vector = beta, degree = degree, datalist = datalist)$hessian
@@ -960,12 +974,16 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
     V <- solve(hessian + Sl)
     
     # Calculate trSSj, trVS and bSb
-    trSSj <- trVS <- bSb <- rep(NA, length(S))
-    for (i in length(S)) {
-      trSSj[i] <- sum(diag(Sl.inv %*% S[[i]]))
-      trVS[i] <- sum(diag(V %*% S[[i]]))
-      bSb[i] <- t(beta) %*% S[[i]] %*% beta
-    }
+    # trSSj <- trVS <- bSb <- rep(NA, length(S))
+    # for (i in length(S)) {
+    #   trSSj[i] <- sum(diag(Sl.inv %*% S[[i]]))
+    #   trVS[i] <- sum(diag(V %*% S[[i]]))
+    #   bSb[i] <- t(beta) %*% S[[i]] %*% beta
+    # }
+    
+    trSSj <- sum(diag(Sl.inv %*% S))
+    trVS <- sum(diag(V %*% S))
+    bSb <- t(beta) %*% S %*% beta
     
     # Update lambdas
     update <- pmax(tiny, trSSj - trVS)/pmax(tiny, bSb) #lambda.new <- lambdaUpdate(lambda, S.lambda.inv, S, V, beta)
@@ -973,7 +991,8 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
     lambda.new <- pmin(update*lambda, lambda.max) 
     
     # Create new S.lambda matrix
-    Sl.new <- lambda.new[1]*S1 + lambda.new[2]*S2
+    # Sl.new <- lambda.new[1]*S1 + lambda.new[2]*S2
+    Sl.new <- lambda.new*S
     
     # Step length of update
     max.step <- max(abs(lambda.new - lambda))
@@ -997,7 +1016,9 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
     if (l1 >= l0) { # Improvement
       if(max.step < 1.5) { # Consider step extension
         lambda2 <- pmin(update*lambda*k*7, exp(12))
-        l3 <- wrapper(coef.vector = beta, degree = degree, Sl = lambda2[1]*S1 + lambda2[2]*S2,
+        l3 <- wrapper(coef.vector = beta, degree = degree,
+                      # Sl = lambda2[1]*S1 + lambda2[2]*S2,
+                      Sl = lambda2*S,
           H = hessian, # Denk dat dit hessian + S.lambda moet zijn ipv hessian + S.lambda.new
           minusLogLik = FALSE,
           datalist = datalist
@@ -1011,7 +1032,10 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
         while (lk < l0 && k > 0.001) { # Don't contract too much since the likelihood does not need to increase
           k <- k/2 ## Contract step
           lambda3 <- pmin(update*lambda*k, lambda.max)
-          l1 <- wrapper(coef.vector = beta, degree = degree, Sl = lambda3[1]*S1 + lambda3[2]*S2, H = hessian, minusLogLik = FALSE, datalist = datalist)
+          l1 <- wrapper(coef.vector = beta, degree = degree,
+                        # Sl = lambda3[1]*S1 + lambda3[2]*S2,
+                        Sl = lambda3*S,
+                        H = hessian, minusLogLik = FALSE, datalist = datalist)
         }
       }
       
@@ -1035,8 +1059,8 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
     # Print information while running...
     print(paste0("Iteration ", iter,
                  ": k = ", k,
-                 " lambda1 = ", lambda.new[1],
-                 " lambda2 = ", lambda.new[2],
+                 " lambda1 = ", lambda.new,
+                 # " lambda2 = ", lambda.new[2],
                  " Score increase = ", score[iter] - score[iter-1],
                  " REML = ", score[iter]))
     

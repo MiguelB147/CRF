@@ -282,7 +282,7 @@ NumericMatrix hessianC(const NumericMatrix riskset,
   
   /* Calculate upper triangle of hessian */
   for (int m = 0; m < totalparam; m++) {
-    for (int l = m+1; l < totalparam; l++) {
+    for (int l = m; l < totalparam; l++) {
       
       double sum1 = 0;
       
@@ -290,7 +290,7 @@ NumericMatrix hessianC(const NumericMatrix riskset,
         for (int j=0; j<n; j++) {
           if (riskset(j,i) > 0) {
             sum1 = sum1 +
-              delta(j,i)*I1(i,j)*deriv_vec[m](j,i)*deriv_vec[l](j,i)*(riskset(j,i) - I2(i,j))*I2(i,j)*(std::exp(logtheta(j,i)))/pow(riskset(j,i) - I2(i,j) + I2(i,j)*(std::exp(logtheta(j,i))),2);
+              delta(j,i)*I1(i,j)*deriv_vec[m](j,i)*deriv_vec[l](j,i)*(riskset(j,i) - I2(i,j))*I2(i,j)*std::exp(logtheta(j,i))/pow(riskset(j,i) - I2(i,j) + I2(i,j)*(std::exp(logtheta(j,i))),2);
           } else {sum1 = sum1 + 0;}
         } 
       }
@@ -301,7 +301,8 @@ NumericMatrix hessianC(const NumericMatrix riskset,
     }
   }
   
-  /* Calculate diagonal */
+  /*
+  // Calculate diagonal
   for (int k=0; k<totalparam; k++) {
     
     double sum2 = 0;
@@ -324,6 +325,8 @@ NumericMatrix hessianC(const NumericMatrix riskset,
     
     result(k,k) = sum2;
   }
+  
+  */
   
   return(result); /* Return second derivative of -loglik */
 }
