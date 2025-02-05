@@ -222,3 +222,5 @@ MatToVec <- function(Matrix) {
   
   return(vector)
 }
+
+
