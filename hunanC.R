@@ -165,11 +165,13 @@ source('hunan-functions.R')
 sourceCpp('test.cpp')
 
 degree = 2
-df = 6
-K <- 2000
+df = 5
+K <- 1000
 unif.ub <- NULL # 5 = 20% censoring, 2.3 = 40% censoring
 
 datalist <- SimData(K = K, df = df, degree = degree, unif.ub = unif.ub)
+
+fit <- nlm(f = wrapper, p = rep(1,df^2), degree = degree, datalist = datalist)
 
 S <- list(Srow(df), Scol(df))
 lambda <- c(0.5,0.5)

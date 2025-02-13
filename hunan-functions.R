@@ -944,20 +944,20 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
     Sl.inv <- MASS::ginv(Sl)
     
     # Estimate betas for given lambdas
-    # beta.fit <- nlm(f = wrapper,
-    #                 p = beta,
-    #                 degree = degree,
-    #                 Sl = Sl,
-    #                 datalist = datalist,
-    #                 hessian = TRUE)
-    
-    beta.fit <- optim(fn = wrapper,
-                    par = beta,
+    beta.fit <- nlm(f = wrapper,
+                    p = beta,
                     degree = degree,
                     Sl = Sl,
                     datalist = datalist,
-                    hessian = TRUE,
-                    control = list(reltol = 1e-10))
+                    hessian = TRUE)
+    
+    # beta.fit <- optim(fn = wrapper,
+    #                 par = beta,
+    #                 degree = degree,
+    #                 Sl = Sl,
+    #                 datalist = datalist,
+    #                 hessian = TRUE,
+    #                 control = list(reltol = 1e-10))
     
     # New betas to be used as initial values for possible next iteration
     # beta <- beta.fit$estimate
