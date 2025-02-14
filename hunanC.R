@@ -179,7 +179,7 @@ datalist <- SimData(K = K, df = df, degree = degree, unif.ub = unif.ub)
 
 
 S <- list(Srow(df), Scol(df))
-lambda <- c(3000,0.2)
+lambda <- c(8,8)
 Sl<- lambda[1]*S[[1]] + lambda[2]*S[[2]]
 
 testmult <- multiroot(Score, start = rep(1, df^2), maxiter = 100, rtol = 1e-10, degree = degree, datalist = datalist, Sl = Sl)
