@@ -1026,7 +1026,7 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
     for (i in length(S)) {
       trSSj[i] <- sum(diag(Sl.inv %*% S[[i]]))
       trVS[i] <- sum(diag(V %*% S[[i]]))
-      bSb[i] <- t(beta) %*% S[[i]] %*% beta
+      bSb[i] <- t(beta) %*% S[[i]] %*% beta,
     }
     
     # trSSj <- sum(diag(Sl.inv %*% S))
@@ -1034,8 +1034,10 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
     # bSb <- t(beta) %*% S %*% beta
     
     # Update lambdas
-    update <- pmax(tiny, trSSj - trVS)/pmax(tiny, bSb) #lambda.new <- lambdaUpdate(lambda, S.lambda.inv, S, V, beta)
-    update[!is.finite(update)] <- 1e6
+    a <- pmax(tiny, trSSj - trVS)
+    update <- a/pmax(tiny, bSb)
+    update[a==0 & bSb==0] <- 0
+    update[!is.finite(update)] <- 14
     lambda.new <- pmin(update*lambda, lambda.max) 
     
     # Create new S.lambda matrix
@@ -1077,7 +1079,7 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
       }
     } else { # No improvement
       lk <- l1
-        while (lk < l0 && k > 0.001) { # Don't contract too much since the likelihood does not need to increase
+        while (lk < l0 && k > 0.0001) { # Don't contract too much since the likelihood does not need to increase k > 0.001
           k <- k/2 ## Contract step
           lambda3 <- pmin(update*lambda*k, lambda.max)
           l1 <- wrapper(coef.vector = beta, degree = degree,

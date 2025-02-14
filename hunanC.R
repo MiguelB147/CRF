@@ -212,7 +212,7 @@ for (i in unique(plot.grid$time1)) {
 par(mfrow = c(1,1))
 
 S <- list(Srow(df), Scol(df))
-fit <- EstimatePenalAsym(datalist = datalist, degree = degree, S = S)
+fit <- EstimatePenalAsym(datalist = datalist, degree = degree, S = S, lambda.init = c(10,10))
 
 
 
