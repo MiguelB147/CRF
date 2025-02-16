@@ -69,7 +69,7 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
     
     beta <- beta.fit$par
     
-    V <- solve(beta.fit$hessian[-1,-1] + Sl)
+    V <- solve(beta.fit$hessian[-1,-1])
     
     trSSj <- sum(diag(Sl.inv %*% S))
     trVS <- sum(diag(V %*% S))
@@ -78,7 +78,7 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
     
     # Update lambdas
     update <- pmax(tiny, trSSj - trVS)/pmax(tiny, bSb)
-    update[!is.finite(update)] <- 1e6
+    update[!is.finite(update)] <- 14
     lambda.new <- pmin(update*lambda, lambda.max) 
     
     # Create new S.lambda matrix
@@ -89,28 +89,30 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
     
     # Assess whether update is an increase in the log-likelihood
     # If not, apply step length control
-    l1 <- loglikpenal(param = beta, X = X, Sl = Sl.new, H = beta.fit$hessian[-1,-1], minusloglik = FALSE)
-    l0 <- loglikpenal(param = beta, X = X, Sl = Sl, H = beta.fit$hessian[-1,-1], minusloglik = FALSE)
+    l1 <- loglikpenal(param = beta, X = X, Sl = Sl.new, H = beta.fit$hessian[-1,-1] - Sl, minusloglik = FALSE)
+    l0 <- loglikpenal(param = beta, X = X, Sl = Sl, H = beta.fit$hessian[-1,-1] - Sl, minusloglik = FALSE)
     
     k = 1 # Step length
     
-    if (l1 >= l0) { # Improvement
-      if(max.step < 1.5) { # Consider step extension
-        lambda2 <- pmin(update*lambda*k*2, exp(12))
+    if (l1 > l0) { # Improvement
+      if(max.step < 1) { # Consider step extension
+        lambda2 <- pmin((update^2)*lambda, exp(12))
         Sl2 <- lambda2*S
-        l3 <- loglikpenal(param = beta, X = X, Sl = Sl2, H = beta.fit$hessian[-1,-1], minusloglik = FALSE)
+        l3 <- loglikpenal(param = beta, X = X, Sl = Sl2, H = beta.fit$hessian[-1,-1] - Sl, minusloglik = FALSE)
         
       if (l3 > l1) { # Improvement - accept extension
         lambda.new <- lambda2
+        l1 <- l3
+        print("Step extension")
       } # No improvement - Accept old step
-    }
+      }
       } else { # No improvement
         lk <- l1
       while (lk < l0 && k > 0.001) { # Don't contract too much since the likelihood does not need to increase
         k <- k/2 ## Contract step
-        lambda3 <- pmin(update*lambda*k, lambda.max)
+        lambda3 <- pmin((update^k)*lambda, lambda.max)
         Sl.new <- lambda3*S
-        lk <- loglikpenal(param = beta, X = X, Sl = Sl.new, H = beta.fit$hessian[-1,-1], minusloglik = FALSE)
+        lk <- loglikpenal(param = beta, X = X, Sl = Sl.new, H = beta.fit$hessian[-1,-1] - Sl, minusloglik = FALSE)
       }
     }
     
@@ -132,7 +134,7 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
                  " REML = ", score[iter]))
     
     # Break procedure if REML change and step size are too small
-    if (iter > 3 && max.step < 1 && max(abs(diff(score[(iter-3):iter]))) < .5) break
+    if (iter > 3 && max.step < 1 && max(abs(diff(score[(iter-3):iter]))) < .1) break
     # Or break is likelihood does not change
     if (l1 == l0) break
     

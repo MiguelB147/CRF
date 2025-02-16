@@ -1,7 +1,8 @@
 
 library(splines)
 library(Rcpp)
-library(doSNOW)
+library(doParallel)
+library(rootSolve)
 
 
 source('hunan-functions.R')
@@ -9,88 +10,72 @@ sourceCpp('test.cpp')
 
 # Simulation ----
 
-cl <- makeCluster(detectCores()-1)
-registerDoSNOW(cl)
+{
+
+# cl <- makeCluster(detectCores()-1)
+# registerDoParallel(cl)
 
 nsim <- 200
 
-pb <- progress_bar$new(
-  format = "Simulation = [:bar] :percent [Elapsed time: :elapsedfull | Estimated time remaining: :eta]",
-  total = nsim,
-  clear = FALSE)
-
-progress <- function(n){
-  pb$tick()
-} 
+# pb <- progress_bar$new(
+#   format = "Simulation = [:bar] :percent [Elapsed time: :elapsedfull | Estimated time remaining: :eta]",
+#   total = nsim,
+#   clear = FALSE)
+# 
+# progress <- function(n){
+#   pb$tick()
+# } 
 
 degree = 2
-df = 6
+df = 8
 K <- 1000
-unif.ub <- 5 # 5 = 20% censoring, 2.3 = 40% censoring
+unif.ub <- NULL # 5 = 20% censoring, 2.3 = 40% censoring
 
 plot.grid <- expand.grid(seq(0.25,1.5,by=0.25), seq = seq(0.1,2.2,by = 0.05))
 names(plot.grid) <- c("time1","time2")
 plot.grid$true <- theta.frank(plot.grid$time1,plot.grid$time2, alpha = 0.0023)
 
-results <- foreach(i=1:nsim,
-                   .packages = c('splines','MASS'),
-                   .errorhandling = "remove",
-                   .combine = 'cbind',
-                   .options.snow = list(progress = progress)) %dopar% {
+# results <- foreach(i=1:nsim,
+#                    .packages = c('splines','MASS','rootSolve'),
+#                    .errorhandling = "remove",
+#                    .combine = 'cbind') %dopar% {
+
+CRF <- matrix(NA, ncol = nsim, nrow = nrow(plot.grid))
+for (i in 1:nsim) {
 
 datalist <- SimData(K = K, df = df, degree = degree, unif.ub = unif.ub)
   
-fit <- nlm(f = loglikCpp,
-           p = rep(1,df^2),
-           degree = degree,
-           df = df,
-           datalist = datalist,
-           hessian = TRUE)
+# fit <- nlm(f = loglikCpp,
+#            p = rep(1,df^2),
+#            degree = degree,
+#            df = df,
+#            datalist = datalist,
+#            hessian = TRUE)
 
-lambda <- c(50,50)
-S.lambda <- lambda[1]*Srow(df) + lambda[2]*Scol(df)
+lambda <- c(2,2)
+Sl <- lambda[1]*Srow(df) + lambda[2]*Scol(df)
 
 # NOTE met penalty minder problemen met gradient=0
-fit <- nlm(f = wrapper,
-           p = rep(1,df^2),
-           degree = degree,
-           S.lambda = S.lambda,
-           datalist = datalist,
-           hessian = TRUE)
-
-# test <- nloptr(x0 = rep(1,df^2),
-#                eval_f = loglikCpp,
-#                degree = degree,
-#                df = df,
-#                datalist = dat.list,
-#                opts = list("algorithm" = "NLOPT_LN_BOBYQA",
-#                            "xtol_rel" = 1.0e-8))
-
-# test2 <- optim(par = rep(1,df^2),
-#                fn = loglikCpp,
-#                degree = degree,
-#                df = df,
-#                datalist = dat.list,
-#                method = "BFGS",
-#                control = list(maxit = 10000))
+fit <- multiroot(Score, start = rep(1, df^2), maxiter = 100, rtol = 1e-10, degree = degree, datalist = datalist, Sl = Sl)
 
 
-A.hat <- matrix(fit$estimate, ncol = df, byrow = FALSE)
-CRF <- mapply(function(x,y) exp(tensor(x,y, coef.matrix = A.hat,
-                                       degree = degree, df = df, knots = cbind(knots1,knots2))),
+CRF[,i] <- mapply(function(x,y) exp(tensor(x,y, coef.vector = fit$root,
+                                       degree = degree, df = df, knots = datalist$knots)),
               plot.grid$time1,
               plot.grid$time2)
 
 }
 
-stopCluster(cl)
+# stopCluster(cl)
 
 
-plot.grid$tensor.mean <- apply(results, MARGIN = 1, mean)
-plot.grid$tensor.median <- apply(results, MARGIN = 1, median)
-plot.grid$tensor.se <- apply(results, MARGIN = 1, sd)
+plot.grid$tensor.mean <- apply(CRF, MARGIN = 1, mean)
+plot.grid$tensor.median <- apply(CRF, MARGIN = 1, median)
+plot.grid$tensor.se <- apply(CRF, MARGIN = 1, sd)
 plot.grid$tensor.median.ub <- plot.grid$tensor.median + plot.grid$tensor.se
 plot.grid$tensor.median.lb <- plot.grid$tensor.median - plot.grid$tensor.se
+
+}
 
 
 plot.grid$poly.mean <- apply(results, MARGIN = 1, mean)
@@ -108,7 +93,7 @@ plot.grid$poly.median.lb <- plot.grid$poly.median - plot.grid$poly.se
 # pdf(file = "/Users/miguel/Documents/CRF code/Spline fit/K400/3 internal knots - degree 2/pointwisemedian.pdf")
 
 # pdf('/Users/miguel/Library/CloudStorage/GoogleDrive-miguel-angel.beynaerts@student.uhasselt.be/Mijn Drive/CRF simulations/Run200degree2df5K1000cens20.pdf')
-pdf('H:/My Drive/CRF simulations/Run200cens40.pdf')
+# pdf('H:/My Drive/CRF simulations/Run200cens40.pdf')
 par(mfrow = c(2,3))
 # title(main = paste0("degree=", degree, " ", "df=", df, "K=", K, " ", nsim, " ", "runs"))
 for (i in unique(plot.grid$time1)) {
@@ -117,10 +102,11 @@ for (i in unique(plot.grid$time1)) {
   plot(x = plot.grid$time2[plot.grid$time1 == i],
        y = plot.grid$true[plot.grid$time1 == i],
        type = 'l',
+       lwd = 2,
        ylab = "CRF", xlab = expression(t[2]), main = parse(text = plottext),
        ylim = c(0,7))
 
-  lines(plot.grid$time2[plot.grid$time1 == i], plot.grid$tensor.median[plot.grid$time1 == i], col = 'red')
+  lines(plot.grid$time2[plot.grid$time1 == i], plot.grid$tensor.median[plot.grid$time1 == i], col = 'grey', lwd = 2)
   points(x = plot.grid$time2[plot.grid$time1 == i], y = plot.grid$tensor.median.lb[plot.grid$time1 == i], pch = 20, cex = 0.5)
   points(x = plot.grid$time2[plot.grid$time1 == i], y = plot.grid$tensor.median.ub[plot.grid$time1 == i], pch = 20, cex = 0.5 )
   legend("topright", legend = c("True", "Estimated"), lty = c(1,1), col = c("black","red"))
@@ -166,23 +152,23 @@ source('hunan-functions.R')
 sourceCpp('test.cpp')
 
 degree = 2
-df = 5
+df = 8
 K <- 1000
 unif.ub <- NULL # 5 = 20% censoring, 2.3 = 40% censoring
 
 datalist <- SimData(K = K, df = df, degree = degree, unif.ub = unif.ub)
 
-# fit <- nlm(f = wrapper, p = rep(1,df^2), degree = degree, datalist = datalist, steptol = 1e-10, hessian = TRUE)
-# fit2 <- optim(rep(1,df^2), wrapper, , degree = degree, datalist = datalist, control = list(reltol=1e-10), hessian = TRUE, method = "SANN")
-# deriv <- derivatives(fit$estimate, degree, datalist, gradient = TRUE, hessian = TRUE)
-# deriv2 <- derivatives(fit2$par, degree, datalist, gradient = TRUE, hessian = FALSE)
-
-
 S <- list(Srow(df), Scol(df))
-lambda <- c(8,8)
+lambda <- c(50,50)
 Sl<- lambda[1]*S[[1]] + lambda[2]*S[[2]]
 
 testmult <- multiroot(Score, start = rep(1, df^2), maxiter = 100, rtol = 1e-10, degree = degree, datalist = datalist, Sl = Sl)
+
+fit <- nlm(f = wrapper, p = testmult$root, degree = degree, Sl = Sl, datalist = datalist, steptol = 1e-10, hessian = TRUE)
+testderiv <- derivatives(fit$estimate, degree, datalist, Sl, gradient = TRUE, hessian = TRUE)
+
+head(round(fit$hessian,2))
+head(round(testderiv$hessian,1))
 
 plot.grid <- expand.grid(seq(0.25,1.5,by=0.25), seq = seq(0.1,2.2,by = 0.05))
 names(plot.grid) <- c("time1","time2")

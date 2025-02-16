@@ -169,7 +169,7 @@ loglikPenal <- function(coef.vector, degree, df, datalist, lambda = c(0,0), S = 
 }
 
 
-derivatives <- function(coef.vector, degree, datalist, S.lambda = NULL, gradient = FALSE, hessian = TRUE) {
+derivatives <- function(coef.vector, degree, datalist, Sl = NULL, gradient = FALSE, hessian = TRUE) {
   
   df <- sqrt(length(coef.vector))
   
@@ -209,6 +209,11 @@ derivatives <- function(coef.vector, degree, datalist, S.lambda = NULL, gradient
                         I3 = datalist$I5) # hessianC returns matrix of second derivatives of -loglik
     
   } else {hessian <- NA}
+  
+  if (!is.null(Sl)) {
+    gradient <- gradient + t(coef.vector) %*% Sl
+    hessian <- hessian + Sl
+  }
   
   
   return(list(gradient = gradient, hessian = hessian))
@@ -354,15 +359,14 @@ Score <- function(coef.vector, degree, datalist, Sl = NULL) {
 #   return(-(L1+L2))
 # }
 
-SimData <- function (K, df, degree, unif.ub) {
-  set.seed(123)
+SimData <- function (K, df, degree, unif.ub, alpha = 0.0023) {
+  
   # set.seed(123)
   
 
   u1 <- runif(K, 0, 1)
   u2 <- runif(K, 0, 1)
   
-  alpha <- 0.0023
   a <- alpha^u1 + (alpha - alpha^u1)*u2
   
   # Fan 2000
@@ -1012,21 +1016,22 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
     beta <- beta.fit$root
     
     # Make sure that hessian is positive definite
-    hessian <- derivatives(coef.vector = beta, degree = degree, datalist = datalist)$hessian
+    hessian <- derivatives(coef.vector = beta, degree = degree, datalist = datalist, gradient = FALSE, hessian = TRUE)$hessian
     
-    decomp <- eigen(hessian)
-    A <- diag(abs(decomp$values))
-    hessian <- decomp$vectors %*% A %*% t(decomp$vectors)
+    # decomp <- eigen(hessian)
+    # A <- diag(abs(decomp$values))
+    # hessian <- decomp$vectors %*% A %*% t(decomp$vectors)
     
     # Calculate V
     V <- solve(hessian + Sl)
+    # V <- solve(hessian)
 
     # Calculate trSSj, trVS and bSb
     trSSj <- trVS <- bSb <- rep(NA, length(S))
     for (i in length(S)) {
       trSSj[i] <- sum(diag(Sl.inv %*% S[[i]]))
       trVS[i] <- sum(diag(V %*% S[[i]]))
-      bSb[i] <- t(beta) %*% S[[i]] %*% beta,
+      bSb[i] <- t(beta) %*% S[[i]] %*% beta
     }
     
     # trSSj <- sum(diag(Sl.inv %*% S))
@@ -1063,9 +1068,9 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
 
     k = 1 # Step length
     
-    if (l1 >= l0) { # Improvement
-      if(max.step < 1.5) { # Consider step extension
-        lambda2 <- pmin(update*lambda*k*7, exp(12))
+    if (l1 > l0) { # Improvement
+      if(max.step < 1) { # Consider step extension
+        lambda2 <- pmin((update^2)*lambda, exp(12))
         l3 <- wrapper(coef.vector = beta, degree = degree,
                       Sl = lambda2[1]*S1 + lambda2[2]*S2,
                       # Sl = lambda2*S,
@@ -1075,13 +1080,14 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
         )
       if (l3 > l1) { # Improvement - accept extension
         lambda.new <- lambda2
+        l1 <- l3
       }
       }
     } else { # No improvement
       lk <- l1
         while (lk < l0 && k > 0.0001) { # Don't contract too much since the likelihood does not need to increase k > 0.001
           k <- k/2 ## Contract step
-          lambda3 <- pmin(update*lambda*k, lambda.max)
+          lambda3 <- pmin((update^k)*lambda, lambda.max)
           l1 <- wrapper(coef.vector = beta, degree = degree,
                         Sl = lambda3[1]*S1 + lambda3[2]*S2,
                         # Sl = lambda3*S,
