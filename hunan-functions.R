@@ -562,7 +562,7 @@ lambdaUpdate <- function(lambda.old, S.lambda.inv, S, V, beta) {
   
 }
 
-wrapper <- function(coef.vector, degree, datalist, Sl = NULL, H = NULL, minusLogLik=TRUE) {
+wrapper <- function(coef.vector, degree, datalist, Sl = NULL, H = NULL, minusLogLik=TRUE) { # H is hier gewoon de unpenalized hessian
   
   # Check whether penalty is applied
   if (is.null(Sl)) {
@@ -965,15 +965,15 @@ EstimatePenaltyNoControl <- function(datalist, degree, S, lambda.init = c(1,1), 
 
 # EFS gebaseerd op de code van Simon Wood in het mgcv package (zie gam.fit4.r op github)
 # gam.control() details in mgcv.r op github
-EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0.001, lambda.max = exp(15)) { 
+EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0.001, eps = 1e-4, lambda.max = exp(15), step.control = TRUE) { 
   
   tiny <- .Machine$double.eps^0.5
   
-  S1 <- S[[1]]
-  S2 <- S[[2]]
+  # S1 <- S[[1]]
+  # S2 <- S[[2]]
   
-  df <- sqrt(ncol(S1))
-  # df <- sqrt(ncol(S))
+  # df <- sqrt(ncol(S1))
+  df <- sqrt(ncol(S))
   
   lambda.new <- lambda.init # In voorbeelden van Wood (2017) is de initiele lambda = 1
   
@@ -981,14 +981,16 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
   
   print("Extended Fellner-Schall method:")
   
-  score <- c()
+  k <- 1
+  
+  score <- rep(0, 200)
   for (iter in 1:200) {
     
     lambda <- lambda.new
     
     # Some calculations to update lambda later...
-    Sl <- lambda[1]*S1 + lambda[2]*S2
-    # Sl <- lambda*S
+    # Sl <- lambda[1]*S1 + lambda[2]*S2
+    Sl <- lambda*S
     Sl.inv <- MASS::ginv(Sl)
     
     # Estimate betas for given lambdas
@@ -1024,30 +1026,29 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
     
     # Calculate V
     V <- solve(hessian + Sl)
-    # V <- solve(hessian)
 
     # Calculate trSSj, trVS and bSb
-    trSSj <- trVS <- bSb <- rep(NA, length(S))
-    for (i in length(S)) {
-      trSSj[i] <- sum(diag(Sl.inv %*% S[[i]]))
-      trVS[i] <- sum(diag(V %*% S[[i]]))
-      bSb[i] <- t(beta) %*% S[[i]] %*% beta
-    }
+    # trSSj <- trVS <- bSb <- rep(NA, length(S))
+    # for (i in length(S)) {
+    #   trSSj[i] <- sum(diag(Sl.inv %*% S[[i]]))
+    #   trVS[i] <- sum(diag(V %*% S[[i]]))
+    #   bSb[i] <- t(beta) %*% S[[i]] %*% beta
+    # }
     
-    # trSSj <- sum(diag(Sl.inv %*% S))
-    # trVS <- sum(diag(V %*% S))
-    # bSb <- t(beta) %*% S %*% beta
+    trSSj <- sum(diag(Sl.inv %*% S))
+    trVS <- sum(diag(V %*% S))
+    bSb <- t(beta) %*% S %*% beta
     
     # Update lambdas
     a <- pmax(tiny, trSSj - trVS)
     update <- a/pmax(tiny, bSb)
-    update[a==0 & bSb==0] <- 0
-    update[!is.finite(update)] <- 14
+    update[a==0 & bSb==0] <- 1
+    update[!is.finite(update)] <- 1e6
     lambda.new <- pmin(update*lambda, lambda.max) 
     
     # Create new S.lambda matrix
-    Sl.new <- lambda.new[1]*S1 + lambda.new[2]*S2
-    # Sl.new <- lambda.new*S
+    # Sl.new <- lambda.new[1]*S1 + lambda.new[2]*S2
+    Sl.new <- lambda.new*S
     
     # Step length of update
     max.step <- max(abs(lambda.new - lambda))
@@ -1065,15 +1066,15 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
     )
     
     l0 <- wrapper(coef.vector = beta, degree = degree, Sl = Sl, H = hessian, minusLogLik = FALSE, datalist = datalist)
-
-    k = 1 # Step length
+    
+  if (step.control) {
     
     if (l1 > l0) { # Improvement
       if(max.step < 1) { # Consider step extension
-        lambda2 <- pmin((update^2)*lambda, exp(12))
+        lambda2 <- pmin(lambda*update^(k*2), exp(12))
         l3 <- wrapper(coef.vector = beta, degree = degree,
-                      Sl = lambda2[1]*S1 + lambda2[2]*S2,
-                      # Sl = lambda2*S,
+                      # Sl = lambda2[1]*S1 + lambda2[2]*S2,
+                      Sl = lambda2*S,
           H = hessian,
           minusLogLik = FALSE,
           datalist = datalist
@@ -1081,25 +1082,43 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
       if (l3 > l1) { # Improvement - accept extension
         lambda.new <- lambda2
         l1 <- l3
+        k <- k*2
       }
       }
     } else { # No improvement
       lk <- l1
-        while (lk < l0 && k > 0.0001) { # Don't contract too much since the likelihood does not need to increase k > 0.001
+      diff <- lambda.new - lambda
+      lambda3 <- lambda.new
+        while (lk < l0 && k > 1) { # Don't contract too much since the likelihood does not need to increase k > 0.001
           k <- k/2 ## Contract step
-          lambda3 <- pmin((update^k)*lambda, lambda.max)
-          l1 <- wrapper(coef.vector = beta, degree = degree,
-                        Sl = lambda3[1]*S1 + lambda3[2]*S2,
-                        # Sl = lambda3*S,
+          lambda3 <- pmin(lambda*update^k, lambda.max)
+          lk <- wrapper(coef.vector = beta, degree = degree,
+                        # Sl = lambda3[1]*S1 + lambda3[2]*S2,
+                        Sl = lambda3*S,
                         H = hessian, minusLogLik = FALSE, datalist = datalist)
+          
+          # k <- k + 1
+          # diff <- diff/2
+          # lambda3 <- lambda + diff
+          # lk <- wrapper(coef.vector = beta, degree = degree,
+          #               # Sl = lambda3[1]*S1 + lambda3[2]*S2,
+          #               Sl = lambda3*S,
+          #               H = hessian, minusLogLik = FALSE, datalist = datalist)
         }
-      }
-      
-    # If step length control is needed, update lambda accordingly
-    if(k < 1 && k > 0.001) {
       lambda.new <- lambda3
       l1 <- lk
-      max.step <- max(abs(lambda.new - lambda))}
+      max.step <- max(abs(lambda.new - lambda))
+      if (k < 1) k <- 1
+      }
+      } # end of step length control
+      
+    # If step length control is needed, update lambda accordingly
+
+    
+    # if(k > 0) {
+    #   lambda.new <- lambda3
+    #   l1 <- lk
+    #   max.step <- max(abs(lambda.new - lambda))}
 
     # save loglikelihood value
     score[iter] <- l1
@@ -1111,12 +1130,17 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
     if (iter > 3 && max.step < 1 && max(abs(diff(score[(iter-3):iter]))) < .1) break
     # Or break is likelihood does not change
     if (l1 == l0) break
+    if (iter==1) old.ll <- l1 else {
+      if (abs(l1-old.ll)<0.1) break
+      old.ll <- l1
+    }
     
     # Print information while running...
     print(paste0("Iteration ", iter,
                  ": k = ", k,
-                 " lambda1 = ", lambda.new[1],
-                 " lambda2 = ", lambda.new[2],
+                 " lambda = ", lambda.new,
+                 # " lambda1 = ", lambda.new[1],
+                 # " lambda2 = ", lambda.new[2],
                  " Score increase = ", score[iter] - score[iter-1],
                  " REML = ", score[iter]))
     
@@ -1127,6 +1151,6 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(1,1), tol = 0
     beta = beta,
     lambda = lambda.new,
     iterations = iter,
-    history = score))
+    history = score[1:iter]))
 }
 

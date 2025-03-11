@@ -152,20 +152,24 @@ source('hunan-functions.R')
 sourceCpp('test.cpp')
 
 degree = 2
-df = 8
+df = 6
 K <- 1000
 unif.ub <- NULL # 5 = 20% censoring, 2.3 = 40% censoring
 
+set.seed(123)
 datalist <- SimData(K = K, df = df, degree = degree, unif.ub = unif.ub)
 
-S <- list(Srow(df), Scol(df))
-lambda <- c(50,50)
-Sl<- lambda[1]*S[[1]] + lambda[2]*S[[2]]
+# S <- list(Srow(df), Scol(df))
+# lambda <- c(50,50)
+# Sl<- lambda[1]*S[[1]] + lambda[2]*S[[2]]
+
+S <- Srow(df)
+fit <- EstimatePenalAsym(datalist = datalist, degree = degree, S = S, lambda.init = 10, step.control = T)
 
 testmult <- multiroot(Score, start = rep(1, df^2), maxiter = 100, rtol = 1e-10, degree = degree, datalist = datalist, Sl = Sl)
 
-fit <- nlm(f = wrapper, p = testmult$root, degree = degree, Sl = Sl, datalist = datalist, steptol = 1e-10, hessian = TRUE)
-testderiv <- derivatives(fit$estimate, degree, datalist, Sl, gradient = TRUE, hessian = TRUE)
+# fit <- nlm(f = wrapper, p = testmult$root, degree = degree, Sl = Sl, datalist = datalist, steptol = 1e-10, hessian = TRUE)
+# testderiv <- derivatives(fit$estimate, degree, datalist, Sl, gradient = TRUE, hessian = TRUE)
 
 head(round(fit$hessian,2))
 head(round(testderiv$hessian,1))
@@ -197,8 +201,6 @@ for (i in unique(plot.grid$time1)) {
 }
 par(mfrow = c(1,1))
 
-S <- list(Srow(df), Scol(df))
-fit <- EstimatePenalAsym(datalist = datalist, degree = degree, S = S, lambda.init = c(10,10))
 
 
 

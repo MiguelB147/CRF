@@ -30,7 +30,7 @@ loglikpenal <- function (param, X, Sl = NULL, H = NULL, minusloglik = TRUE) {
 }
 
 
-EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15)) { 
+EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15), step.control = TRUE) { 
   
   tiny <- .Machine$double.eps^0.5
   
@@ -84,7 +84,7 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
     
     # Update lambdas
     update <- pmax(tiny, trSSj - trVS)/pmax(tiny, bSb)
-    update[!is.finite(update)] <- 14
+    update[!is.finite(update)] <- 1e6
     lambda.new <- pmin(update*lambda, lambda.max) 
     
     # Create new S.lambda matrix
@@ -100,6 +100,7 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
     
     k = 1 # Step length
     
+    if (step.control) {
     if (l1 > l0) { # Improvement
       if(max.step < 1) { # Consider step extension
         lambda2 <- pmin(update^2*lambda, exp(12))
@@ -129,6 +130,8 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
       max.step <- max(abs(lambda.new - lambda))
     } else k <- 1
     
+    } # end of step length control
+    
     #save loglikelihood value
     score[iter] <- l1
     
@@ -143,7 +146,6 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
     if (iter > 3 && max.step < 1 && max(abs(diff(score[(iter-3):iter]))) < .1) {print("Converged"); break} 
     # Or break is likelihood does not change
     if (l1 == l0) break
-    
     
     
   } # End of for loop
