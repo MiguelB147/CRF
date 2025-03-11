@@ -164,7 +164,7 @@ datalist <- SimData(K = K, df = df, degree = degree, unif.ub = unif.ub)
 # Sl<- lambda[1]*S[[1]] + lambda[2]*S[[2]]
 
 S <- Srow(df)
-fit <- EstimatePenalAsym(datalist = datalist, degree = degree, S = S, lambda.init = 10, step.control = T)
+fit <- EstimatePenalAsym(datalist = datalist, degree = degree, S = S, lambda.init = 100, step.control = T)
 
 testmult <- multiroot(Score, start = rep(1, df^2), maxiter = 100, rtol = 1e-10, degree = degree, datalist = datalist, Sl = Sl)
 
