@@ -13,7 +13,7 @@ loglikpenal <- function (param, X, Sl = NULL, H = NULL, minusloglik = TRUE) {
   } else {
     ev <- eigen(Sl)$values
     logSl <- log(prod(ev[ev > 0]))
-    penalty <- (t(beta[-1]) %*% Sl %*% beta[-1])/2
+    penalty <- (t(beta) %*% Sl %*% beta)/2
   }
   
   if (!is.null(H)) {
@@ -34,7 +34,7 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15),
   
   tiny <- .Machine$double.eps^0.5
   
-  df <- ncol(S) + 1
+  df <- ncol(S) 
   
   # Positioning of the boundary knots
   xl <- min(times); xu <- max(times); xr <- xu - xl
@@ -57,6 +57,7 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15),
   
   print("Extended Fellner-Schall method:")
   
+  k <- 1
   score <- c()
   for (iter in 1:200) {
     
@@ -75,11 +76,11 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15),
     
     beta <- beta.fit$par
     
-    V <- solve(beta.fit$hessian[-1,-1])
+    V <- solve(beta.fit$hessian)
     
     trSSj <- sum(diag(Sl.inv %*% S))
     trVS <- sum(diag(V %*% S))
-    bSb <- t(beta[-1]) %*% S %*% beta[-1]
+    bSb <- t(beta) %*% S %*% beta
     
     
     # Update lambdas
@@ -95,40 +96,39 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15),
     
     # Assess whether update is an increase in the log-likelihood
     # If not, apply step length control
-    l1 <- loglikpenal(param = beta, X = X, Sl = Sl.new, H = beta.fit$hessian[-1,-1] - Sl, minusloglik = FALSE)
-    l0 <- loglikpenal(param = beta, X = X, Sl = Sl, H = beta.fit$hessian[-1,-1] - Sl, minusloglik = FALSE)
-    
-    k = 1 # Step length
+    l1 <- loglikpenal(param = beta, X = X, Sl = Sl.new, H = beta.fit$hessian - Sl, minusloglik = FALSE)
+    l0 <- loglikpenal(param = beta, X = X, Sl = Sl, H = beta.fit$hessian - Sl, minusloglik = FALSE)
     
     if (step.control) {
     if (l1 > l0) { # Improvement
       if(max.step < 1) { # Consider step extension
-        lambda2 <- pmin(update^2*lambda, exp(12))
+        lambda2 <- pmin(update^(2*k)*lambda, exp(12))
         Sl2 <- lambda2*S
-        l3 <- loglikpenal(param = beta, X = X, Sl = Sl2, H = beta.fit$hessian[-1,-1] - Sl, minusloglik = FALSE)
+        l3 <- loglikpenal(param = beta, X = X, Sl = Sl2, H = beta.fit$hessian - Sl, minusloglik = FALSE)
         
         if (l3 > l1) { # Improvement - accept extension
           lambda.new <- lambda2
           l1 <- l3
+          k <- k*2
           print("Step extension")
         } # No improvement - Accept old step
       }
     } else { # No improvement
       lk <- l1
-      while (lk < l0 && k > 0.001) { # Don't contract too much since the likelihood does not need to increase
+      lambda3 <- lambda.new
+      while (lk < l0 && k > 1) { # Don't contract too much since the likelihood does not need to increase
         k <- k/2 ## Contract step
         lambda3 <- pmin(update^k*lambda, lambda.max)
         Sl.new <- lambda3*S
-        lk <- loglikpenal(param = beta, X = X, Sl = Sl.new, H = beta.fit$hessian[-1,-1] - Sl, minusloglik = FALSE)
+        lk <- loglikpenal(param = beta, X = X, Sl = Sl.new, H = beta.fit$hessian - Sl, minusloglik = FALSE)
       }
-    }
-    
-    # If step length control is needed, update lambda accordingly
-    if (k < 1 & k > 0.001) {
       lambda.new <- lambda3
       l1 <- lk
       max.step <- max(abs(lambda.new - lambda))
-    } else k <- 1
+      if (k<1) k<-1
+    }
+    
+    # If step length control is needed, update lambda accordingly
     
     } # end of step length control
     
@@ -150,7 +150,7 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15),
     
   } # End of for loop
   
-  edf <- sum(diag(V %*% beta.fit$hessian[-1,-1]))
+  edf <- sum(diag(V %*% beta.fit$hessian))
   
   return(list(
     beta = beta,

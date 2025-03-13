@@ -10,7 +10,7 @@ library(mgcv)
 source("cars-functions.R")
 
 
-fit.gam <- gam_model <- gam(mpg ~ s(hp, k = 10, bs = "bs"), optimizer = 'efs')
+fit.gam <- gam(mpg ~ s(hp, k = 10, bs = "bs"), optimizer = 'efs')
 c(fit.gam$coef, fit.gam$sig2)
 fit.gam$sp
 

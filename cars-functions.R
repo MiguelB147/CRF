@@ -48,6 +48,7 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
   beta <- init.fit$coef
   
 
+  k <- 1
   
   print("Extended Fellner-Schall method:")
   
@@ -92,36 +93,33 @@ EstimatePenal <- function(S, lambda.init = 1, tol = 0.001, lambda.max = exp(15))
     l1 <- loglikpenal(param = beta, X = X, Sl = Sl.new, H = beta.fit$hessian[-1,-1] - Sl, minusloglik = FALSE)
     l0 <- loglikpenal(param = beta, X = X, Sl = Sl, H = beta.fit$hessian[-1,-1] - Sl, minusloglik = FALSE)
     
-    k = 1 # Step length
-    
     if (l1 > l0) { # Improvement
       if(max.step < 1) { # Consider step extension
-        lambda2 <- pmin((update^2)*lambda, exp(12))
+        lambda2 <- pmin((update^(2*k))*lambda, exp(12))
         Sl2 <- lambda2*S
         l3 <- loglikpenal(param = beta, X = X, Sl = Sl2, H = beta.fit$hessian[-1,-1] - Sl, minusloglik = FALSE)
         
       if (l3 > l1) { # Improvement - accept extension
         lambda.new <- lambda2
         l1 <- l3
-        print("Step extension")
+        k <- k*2
       } # No improvement - Accept old step
       }
       } else { # No improvement
         lk <- l1
-      while (lk < l0 && k > 0.001) { # Don't contract too much since the likelihood does not need to increase
+        lambda3 <- lambda.new
+      while (lk < l0 && k > 1) { # Don't contract too much since the likelihood does not need to increase
         k <- k/2 ## Contract step
         lambda3 <- pmin((update^k)*lambda, lambda.max)
         Sl.new <- lambda3*S
         lk <- loglikpenal(param = beta, X = X, Sl = Sl.new, H = beta.fit$hessian[-1,-1] - Sl, minusloglik = FALSE)
       }
+        lambda.new <- lambda3
+        l1 <- lk
+        max.step <- max(abs(lambda.new - lambda))
+        if (k<1) k <- 1
     }
     
-    # If step length control is needed, update lambda accordingly
-    if (k < 1 & k > 0.001) {
-      lambda.new <- lambda3
-      l1 <- lk
-      max.step <- max(abs(lambda.new - lambda))
-      } else k <- 1
     
     #save loglikelihood value
     score[iter] <- l1

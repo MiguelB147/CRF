@@ -159,12 +159,12 @@ unif.ub <- NULL # 5 = 20% censoring, 2.3 = 40% censoring
 set.seed(123)
 datalist <- SimData(K = K, df = df, degree = degree, unif.ub = unif.ub)
 
-# S <- list(Srow(df), Scol(df))
+S <- list(Srow(df), Scol(df))
 # lambda <- c(50,50)
 # Sl<- lambda[1]*S[[1]] + lambda[2]*S[[2]]
 
 S <- Srow(df)
-fit <- EstimatePenalAsym(datalist = datalist, degree = degree, S = S, lambda.init = 100, step.control = T)
+fit <- EstimatePenalAsym(datalist = datalist, degree = degree, S = S, step.control = F)
 
 testmult <- multiroot(Score, start = rep(1, df^2), maxiter = 100, rtol = 1e-10, degree = degree, datalist = datalist, Sl = Sl)
 
