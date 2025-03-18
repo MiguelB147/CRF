@@ -161,18 +161,16 @@ datalist <- SimData(K = K, df = df, degree = degree, unif.ub = unif.ub)
 
 S <- list(Srow(df), Scol(df))
 # lambda <- c(50,50)
-# Sl<- lambda[1]*S[[1]] + lambda[2]*S[[2]]
+Sl<- lambda[1]*S[[1]] + lambda[2]*S[[2]]
+
+test <- eigen(Sl)
+prod(test$values[test$values > 0])
+log(prod(test$values[test$values > 0]))
 
 S <- Srow(df)
-fit <- EstimatePenalAsym(datalist = datalist, degree = degree, S = S, step.control = F)
+fit <- EstimatePenalAsym(datalist = datalist, lambda.init = c(50,50), degree = degree, S = S, step.control = F)
 
-testmult <- multiroot(Score, start = rep(1, df^2), maxiter = 100, rtol = 1e-10, degree = degree, datalist = datalist, Sl = Sl)
-
-# fit <- nlm(f = wrapper, p = testmult$root, degree = degree, Sl = Sl, datalist = datalist, steptol = 1e-10, hessian = TRUE)
-# testderiv <- derivatives(fit$estimate, degree, datalist, Sl, gradient = TRUE, hessian = TRUE)
-
-head(round(fit$hessian,2))
-head(round(testderiv$hessian,1))
+test <- efsud.fit(fit$beta, degree = degree, datalist = datalist, Sl = 2*S[[1]] + 0*S[[2]])
 
 plot.grid <- expand.grid(seq(0.25,1.5,by=0.25), seq = seq(0.1,2.2,by = 0.05))
 names(plot.grid) <- c("time1","time2")
@@ -182,7 +180,7 @@ plot.grid$true <- theta.frank(plot.grid$time1,plot.grid$time2, alpha = 0.0023)
 #                                        degree = degree, df = df, knots = datalist$knots)),
 #               plot.grid$time1,
 #               plot.grid$time2)
-CRF <- mapply(function(x,y) exp(tensor(x,y, coef.vector = testmult$root,
+CRF <- mapply(function(x,y) exp(tensor(x,y, coef.vector = test$beta,
                                        degree = degree, df = df, knots = datalist$knots)),
               plot.grid$time1,
               plot.grid$time2)
