@@ -1,5 +1,5 @@
 
-WoodSpline <- function(t, dim, degree = 3, type = NULL, quantile = FALSE, repara = FALSE, m2 = degree-1) {
+WoodSpline <- function(t, dim, degree = 3, type = NULL, quantile = FALSE, scale = TRUE, m2 = degree-1) {
   
   nk <- dim - degree + 1 # Number of "interior" knots (internal + boundary)
   
@@ -17,7 +17,7 @@ WoodSpline <- function(t, dim, degree = 3, type = NULL, quantile = FALSE, repara
   
   X <- splines::splineDesign(k, t, degree+1)
   
-  if (type == "bs") {
+  if (is.null(type)) {S <- D1 <- NULL} else if (type == "bs") {
     
     pord <- degree - m2
     k0 <- k[(degree+1):(degree+nk)]
@@ -82,23 +82,31 @@ WoodSpline <- function(t, dim, degree = 3, type = NULL, quantile = FALSE, repara
     # R <- chol(W) # t(R) %*% R = W
     # D <- R %*% G # t(D) %*% D = S
   } else if (type == "ps") {
-    S <- crossprod(diff(diag(dim), differences = m2))
-  } else S <- NULL
-  
-  if(repara) {
-    qrX <- qr(X)
-    R <- qr.R(qrX)
-    Q <- qr.Q(qrX)
-    Rinv <- solve(R)
-    eigenS <- eigen(t(Rinv) %*% S %*% Rinv, symmetric = TRUE)
-    Sprime <- diag(eigenS$values)
-    Xprime <- Q %*% eigenS$vectors
-    
-    S <- Sprime
-    X <- Xprime
+    D1 <- diff(diag(dim), differences = m2)
+    S <- crossprod(D1)
   }
   
-  return(list(X = X, knots = k, S = S))
+  # if(repara) {
+  #   qrX <- qr(X)
+  #   R <- qr.R(qrX)
+  #   Q <- qr.Q(qrX)
+  #   Rinv <- solve(R)
+  #   eigenS <- eigen(t(Rinv) %*% S %*% Rinv, symmetric = TRUE)
+  #   Sprime <- diag(eigenS$values)
+  #   Xprime <- Q %*% eigenS$vectors
+  #   
+  #   S <- Sprime
+  #   X <- Xprime
+  # }
+  
+  if (scale) {
+    maXX <- norm(X,type="I")^2
+    maS <- norm(S)/maXX
+    S <- S/maS
+  } else S.scale <- NULL
+
+  
+  return(list(X = X, knots = k, S = S, D = D1, S.scale = maS))
 }
 
 
@@ -160,12 +168,12 @@ hessian <- function(X, Sl = NULL) {
 }
 
 
-EstimatePenal <- function(dim = 10, lambda.init = 10, type = "bs", quantile = FALSE, repara = FALSE, tol = 0.001, lambda.max = exp(15), step.control = TRUE) { 
+EstimatePenal <- function(dim = 10, lambda.init = 10, type = "bs", quantile = FALSE, scale = TRUE, tol = 0.001, lambda.max = exp(15), step.control = TRUE) { 
   
   tiny <- .Machine$double.eps^0.5
   
 
-  model <- WoodSpline(t = mtcars$hp, dim = dim, degree = 3, type = type, repara = repara, quantile = quantile)
+  model <- WoodSpline(t = mtcars$hp, dim = dim, degree = 3, type = type, scale = scale, quantile = quantile)
   S <- model$S
   X <- model$X
 
