@@ -159,16 +159,18 @@ unif.ub <- NULL # 5 = 20% censoring, 2.3 = 40% censoring
 set.seed(123)
 datalist <- SimData(K = K, df = df, degree = degree, unif.ub = unif.ub)
 
-S <- list(Srow(df), Scol(df))
+# S <- list(Srow(df), Scol(df))
 # lambda <- c(50,50)
-Sl<- lambda[1]*S[[1]] + lambda[2]*S[[2]]
+# Sl<- lambda[1]*S[[1]] + lambda[2]*S[[2]]
+# S <- Srow(df)
+# 
+# test <- eigen(Sl)
+# prod(test$values[test$values > 0])
+# log(prod(test$values[test$values > 0]))
 
-test <- eigen(Sl)
-prod(test$values[test$values > 0])
-log(prod(test$values[test$values > 0]))
-
-S <- Srow(df)
-fit <- EstimatePenalAsym(datalist = datalist, lambda.init = c(50,50), degree = degree, S = S, step.control = F)
+S <- list(Srow(df, diff = degree-1), Scol(df, diff = degree-1))
+fit <- EstimatePenal(datalist = datalist, degree = degree, S = S, lambda.init = c(10,10), step.control = F)
+fit <- EstimatePenal2(datalist = datalist, dim = 6, lambda.init = c(10,10), step.control = F)
 
 test <- efsud.fit(fit$beta, degree = degree, datalist = datalist, Sl = 2*S[[1]] + 0*S[[2]])
 

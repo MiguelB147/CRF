@@ -5,6 +5,110 @@ theta.frank <- function(x,y,alpha) {
   return(A*C/B)
 }
 
+WoodSpline <- function(t, dim, degree = 3, knots = NULL, eval.penalty = FALSE) {
+  
+  if (is.null(knots)) {
+    nk <- dim - degree + 1 # Number of "interior" knots (internal + boundary)
+    
+    xl <- min(t)
+    xu <- max(t)
+    xr <- xu - xl
+    xl <- xl-xr*0.001;
+    xu <- xu+xr*0.001
+    dx <- (xu-xl)/(nk-1)
+    k <- seq(xl-dx*degree,xu+dx*degree,length=nk+2*degree) # Vector of knots
+    k.int <- quantile(t, probs = seq(0, 1, length = nk))[-c(1, nk)]
+    k[(degree+2):(length(k)-(degree+1))] <- k.int
+  } else {k <- knots}
+  
+  X <- splines::splineDesign(k, t, degree+1)
+  
+  D <- S <- NULL
+  if (eval.penalty) {
+    
+    p <- degree - 2
+    k0 <- k[(degree+1):(degree+nk)]
+    h <- diff(k0)
+    h1 <- rep(h/p, each = p)
+    k1 <- cumsum(c(k0[1],h1))
+    G <- splines::splineDesign(k,k1,derivs = 2)
+    
+    P <- H <- matrix(0, ncol = p+1, nrow = p+1)
+    for (i in 1:(p+1)) {
+      for (j in 1:(p+1)) {
+        P[i,j] <- (-1 + 2*(i-1)/p)^j
+        H[i,j] <- (1 + (-1)^(i+j-2))/(i+j-1)
+      }
+    }
+    Wtilde <- t(solve(P)) %*% H %*% solve(P)
+    
+    W <- matrix(0, ncol = length(k1), nrow = length(k1))
+    for (q in 1:length(h)) {
+      for (i in 1:(p+1)) {
+        for (j in 1:(p+1)) {
+          W[i+p*q-p,j+p*q-p] <- h[q]*Wtilde[i,j]/2
+        }
+      }
+    }
+    
+    S <- t(G) %*% W %*% G
+    
+    # Banded cholesky decomposition
+    R <- chol(W) # t(R) %*% R = W
+    D <- R %*% G # t(D) %*% D = S
+    
+    # int <- function(x,i,j,derivs) {m <- splines::splineDesign(k, x, degree+1, derivs = derivs); m[,i]*m[,j]}
+    # 
+    # P <- Q <- matrix(NA, ncol = dim, nrow = dim)
+    # for (i in 1:dim) {
+    #   for (j in i:dim) {
+    #     Q[i,j] <- Q[j,i] <- integrate(int, lower = xl, upper = xu, rel.tol = 1e-10, i, j, derivs = 0)$value
+    #     P[i,j] <- P[j,i] <- integrate(int, lower = xl, upper = xu, rel.tol = 1e-10, i, j, derivs = 2)$value
+    #   }
+    # }
+  }
+
+  return(list(X, knots = k, D = D, S = S))
+}
+
+# See Reiss et al. (2014) 
+ReissTensorPenalty <- function(object1, object2, degree = 3, bs = "bs") {
+  
+  if (bs == "bs") {
+    Pt <- object1$P
+    Ps <- object2$P
+    Qt <- object1$Q
+    Qs <- object2$Q
+    
+    S1 <- Ps %x% Qt
+    S2 <- Qs %x% Pt
+  } else if (bs == "ps") {
+    df <- ncol(object1$X)
+    
+    S1 <- crossprod(diff(diag(df^2), lag = df, differences = degree-1))
+    
+    P <- kronecker(diag(df), diff(diag(df), differences = degree-1))
+    S2 <- crossprod(P)
+  } else stop("Penalty type is not correctly specified")
+  
+  return(list(S1,S2))
+}
+
+WoodTensorPenalty  <- function() {
+  
+}
+
+WoodTensor <- function(X1, X2, coef.vector) {
+  
+  coef.matrix <- matrix(coef.vector, ncol = ncol(X1), byrow = FALSE)
+  
+  spline <- X1 %*% coef.matrix %*% t(X2)
+  
+  return(spline)
+}
+
+
+
 tensor <- function(t1, t2, coef.vector, df, degree, knots) {
   
   coef.matrix <- matrix(coef.vector, ncol = df, byrow = FALSE)
@@ -220,6 +324,57 @@ derivatives <- function(coef.vector, degree, datalist, Sl = NULL, gradient = FAL
   # return(gradient)
 }
 
+derivatives2 <- function(coef.vector, X1, X2, datalist, Sl = NULL, gradient = FALSE, hessian = TRUE) {
+  
+  df <- ncol(X1)
+  
+  # Tensor product spline
+  logtheta2 <- WoodTensor(X1, X2, coef.vector = coef.vector)
+  
+  M <- diag(df^2)
+  
+  # List of gradient matrices for every spline coefficient
+  deriv <- apply(M, 2, WoodTensor,
+                 X1 = X1, X2 = X2,
+                 simplify = FALSE)
+  
+  if (isTRUE(gradient)) {
+    
+    gradient <- gradientC(riskset = datalist$riskset,
+                          logtheta = logtheta2,
+                          df = df,
+                          delta = datalist$delta.prod,
+                          deriv = deriv,
+                          I1 = datalist$I1,
+                          I2 = datalist$I2,
+                          I3 = datalist$I5,
+                          I4 = datalist$I6) # gradientC returns vector of derivatives of -loglik
+    
+  } else {gradient <- NA}
+  
+  if (isTRUE(hessian)) {
+    
+    hessian <- hessianC(riskset = t(datalist$riskset),
+                        logtheta = t(logtheta2),
+                        deriv = deriv,
+                        df = df,
+                        delta = t(datalist$delta.prod),
+                        I1 = datalist$I1,
+                        I2 = datalist$I2,
+                        I3 = datalist$I5) # hessianC returns matrix of second derivatives of -loglik
+    
+  } else {hessian <- NA}
+  
+  if (!is.null(Sl)) {
+    gradient <- gradient + t(coef.vector) %*% Sl
+    hessian <- hessian + Sl
+  }
+  
+  
+  return(list(gradient = gradient, hessian = hessian))
+  # return(gradient)
+}
+
 Score <- function(coef.vector, degree, datalist, Sl = NULL) {
   
   df <- sqrt(length(coef.vector))
@@ -232,6 +387,38 @@ Score <- function(coef.vector, degree, datalist, Sl = NULL) {
   # List of gradient matrices for every spline coefficient
   deriv <- apply(M, 2, tensor,
                  t1 = datalist$X[,1], t2 = datalist$X[,2], degree = degree, df = df, knots = datalist$knots,
+                 simplify = FALSE)
+  
+  
+  gradient <- gradientC(riskset = datalist$riskset,
+                        logtheta = logtheta2,
+                        df = df,
+                        delta = datalist$delta.prod,
+                        deriv = deriv,
+                        I1 = datalist$I1,
+                        I2 = datalist$I2,
+                        I3 = datalist$I5,
+                        I4 = datalist$I6) # gradientC returns vector of derivatives of -loglik
+  
+  if (!is.null(Sl)) {
+    penalty <- t(coef.vector) %*% Sl
+  } else penalty <- 0
+  
+  return(gradient + penalty)
+}
+
+Score2 <- function(coef.vector, X1, X2, datalist, Sl = NULL) {
+  
+  # Tensor product spline
+  logtheta2 <- WoodTensor(X1 = X1, X2 = X2, coef.vector = coef.vector)
+  
+  df <- ncol(X1)
+  
+  M <- diag(df^2)
+  
+  # List of gradient matrices for every spline coefficient
+  deriv <- apply(M, 2, WoodTensor,
+                 X1 = X1, X2 = X2,
                  simplify = FALSE)
   
   
@@ -317,30 +504,6 @@ Score <- function(coef.vector, degree, datalist, Sl = NULL) {
 # }
 
 
-
-# eval_function <- function(coef.vector, degree, df, datalist) {
-# 
-#   logtheta2 <- tensor(datalist$X[,1], datalist$X[,2], degree = degree, coef.vector = coef.vector, df = df, knots = datalist$knots)
-#   logtheta.deriv <- tensor.deriv(datalist$X[,1], datalist$X[,2], degree = degree, df = df, knots = datalist$knots)
-#     
-#   U1 <- sum(diag(datalist$delta.prod)*diag(logtheta.deriv))
-#   U2 <- ScoreFunc(riskset = t(datalist$riskset),
-#                   logthetaderiv = t(logtheta.deriv),
-#                   logtheta = t(logtheta2),
-#                   delta = t(datalist$delta.prod),
-#                   I1 = datalist$I1,
-#                   I2 = datalist$I2)
-#   U4 <- ScoreFunc(riskset = datalist$riskset,
-#                   logthetaderiv = logtheta.deriv,
-#                   logtheta = logtheta2,
-#                   delta = datalist$delta.prod,
-#                   I1 = t(datalist$I1),
-#                   I2 = t(datalist$I2))
-#   
-#   return((2*U1 - U2 - U4)/nrow(datalist$X))
-#   
-# }
-
 # loglik.poly <- function(coef.vector) {
 #   
 #   logtheta2 <- outer(X[,1], X[,2], function (x,y) polynomial(x,y, coef.vec = coef.vector))
@@ -361,9 +524,6 @@ Score <- function(coef.vector, degree, datalist, Sl = NULL) {
 
 SimData <- function (K, df, degree, unif.ub, alpha = 0.0023) {
   
-  # set.seed(123)
-  
-
   u1 <- runif(K, 0, 1)
   u2 <- runif(K, 0, 1)
   
@@ -398,24 +558,24 @@ SimData <- function (K, df, degree, unif.ub, alpha = 0.0023) {
   
   delta <- as.matrix(cbind(delta1,delta2))
   
-  # NOTE max+1 in geval van unif.ub = 5 geeft gradient=0 voor redelijk veel betas.
-  if (!is.null(unif.ub) && unif.ub < 5) {
-    qq1 <- quantile(X1[delta1 == 1], probs = seq(0,1,length = df - degree + 2))
-    knots1 <- c(min(X1)-1, qq1[-c(1,length(qq1))], max(X1)+1)
-    qq2 <- quantile(X2[delta2 == 1], probs = seq(0,1,length = df - degree + 2))
-    knots2 <- c(min(X2)-1, qq1[-c(1,length(qq2))], max(X2)+1)
-    
-    # knots1 <- seq(min(X1)-1, max(X1)+1, length.out = df - degree + 2)
-    # knots2 <- seq(min(X2)-1, max(X2)+1, length.out = df - degree + 2)
-  } else {
-    qq1 <- quantile(X1[delta1 == 1], probs = seq(0,1,length = df - degree + 2))
-    knots1 <- c(min(X1)-1, qq1[-c(1,length(qq1))], max(X1))
-    qq2 <- quantile(X2[delta2 == 1], probs = seq(0,1,length = df - degree + 2))
-    knots2 <- c(min(X2)-1, qq1[-c(1,length(qq2))], max(X2))
-    
-    # knots1 <- seq(min(X1)-1, max(X1), length.out = df - degree + 2)
-    # knots2 <- seq(min(X2)-1, max(X2), length.out = df - degree + 2)
-  }
+  # # NOTE max+1 in geval van unif.ub = 5 geeft gradient=0 voor redelijk veel betas.
+  # if (!is.null(unif.ub) && unif.ub < 5) {
+  #   qq1 <- quantile(X1[delta1 == 1], probs = seq(0,1,length = df - degree + 2))
+  #   knots1 <- c(min(X1)-1, qq1[-c(1,length(qq1))], max(X1)+1)
+  #   qq2 <- quantile(X2[delta2 == 1], probs = seq(0,1,length = df - degree + 2))
+  #   knots2 <- c(min(X2)-1, qq1[-c(1,length(qq2))], max(X2)+1)
+  #   
+  #   # knots1 <- seq(min(X1)-1, max(X1)+1, length.out = df - degree + 2)
+  #   # knots2 <- seq(min(X2)-1, max(X2)+1, length.out = df - degree + 2)
+  # } else {
+  #   qq1 <- quantile(X1[delta1 == 1], probs = seq(0,1,length = df - degree + 2))
+  #   knots1 <- c(min(X1)-1, qq1[-c(1,length(qq1))], max(X1))
+  #   qq2 <- quantile(X2[delta2 == 1], probs = seq(0,1,length = df - degree + 2))
+  #   knots2 <- c(min(X2)-1, qq1[-c(1,length(qq2))], max(X2))
+  #   
+  #   # knots1 <- seq(min(X1)-1, max(X1), length.out = df - degree + 2)
+  #   # knots2 <- seq(min(X2)-1, max(X2), length.out = df - degree + 2)
+  # }
 
   
   ## Check whether first delta1=delta2=1
@@ -486,7 +646,7 @@ SimData <- function (K, df, degree, unif.ub, alpha = 0.0023) {
   delta.prod = DeltaC(delta[,1], delta[,2])
 
   return(list(X = cbind(X[,1],X[,2]),
-              knots = cbind(knots1,knots2),
+              # knots = cbind(knots1,knots2),
               riskset = N,
               I1 = I1,
               I2 = I2,
@@ -509,34 +669,20 @@ SimData <- function (K, df, degree, unif.ub, alpha = 0.0023) {
 # 
 # }
 
-Srow <- function(df) {
-  
-  P <- diff(diag(df^2), lag = df, differences = 2)
-  
-  return(crossprod(P))
-  
-}
-
-Scol <- function(df) {
-  P <- matrix(0, ncol = df^2, nrow = df^2)
-  
-  # Block to fill 
-  P1 <- diff(diag(df), differences = 2)
-  
-  P <- kronecker(diag(df), P1)
-  
-  return(crossprod(P))
-  
-}
-
-# Srow <- function(df) {
-#   P <- matrix(0, ncol = df^2, nrow = df^2)
-#   index.col <- df - 2
-#   for (j in 0:(index.col-1)) {
-#     P[(1+df*j):(df+j*df),(1+j*df):(df*j+df)] <- diag(1, ncol = df, nrow = df)
-#     P[(1+df*j):(df+j*df),(j*df+df+1):(2*df+j*df)] <- diag(-2, ncol = df, nrow = df)
-#     P[(1+df*j):(df+j*df),(2*df+j*df+1):(3*df+j*df)] <- diag(1, ncol = df, nrow = df)
-#     }
+# Srow <- function(df, diff = 2) {
+#   
+#   P <- diff(diag(df^2), lag = df, differences = diff)
+#   
+#   return(crossprod(P))
+#   
+# }
+# 
+# Scol <- function(df, diff = 2) {
+# 
+#     # Block to fill 
+#   P1 <- diff(diag(df), differences = diff)
+#   
+#   P <- kronecker(diag(df), P1)
 #   
 #   return(crossprod(P))
 #   
@@ -637,9 +783,104 @@ wrapper <- function(coef.vector, degree, datalist, Sl = NULL, H = NULL, minusLog
   
 }
 
+wrapper2 <- function(coef.vector, X1, X2, Sl = NULL, H = NULL, minusLogLik=TRUE) { # H is hier gewoon de unpenalized hessian
+  
+  # Check whether penalty is applied
+  if (is.null(Sl)) {
+    penaltyLik <- logSl <- logdetH <- 0
+  } else {
+    
+    # Calculate penalty terms for log f_lambda(y,beta) Wood (2017) p.1076 
+    Sl.eigenv <- eigen(Sl, only.values = TRUE)$values
+    Sl.eigenv[abs(Sl.eigenv) < 1e-6] <- 0
+    
+    penaltyLik <- t(coef.vector) %*% Sl %*% coef.vector
+    logSl <- sum(log(Sl.eigenv[Sl.eigenv > 0]))
+    # constant <- sum(Sl.eigenv == 0)*log(2*pi)/2 # Zie Wood (2016) p.1550
+    
+    # penaltyGrad <- t(t(coef.vector) %*% S.lambda)
+    # penaltyHess <- S.lambda
+  }
+  
+  # TODO implement sanity check that !is.null(S.lambda) & !is.null(H) & minusLogLik=FALSE implies laplace likelihood
+  if (!is.null(H)) {
+    logdetH <- log(det(H + Sl))
+  } else logdetH <- 0
+  
+  logtheta2 <- WoodTensor(X1 = X1, X2 = X2, coef.vector = coef.vector)
+  
+  
+  # log f_lambda(y,beta)
+  # ll <- logLikC(riskset = datalist$riskset,
+  #               logtheta = logtheta2,
+  #               delta = datalist$delta.prod,
+  #               I1 = datalist$I1,
+  #               I2 = datalist$I2,
+  #               I3 = datalist$I5,
+  #               I4 = datalist$I6) + penaltyLik - logS.lambda + logdetH - constant
+  
+  # ll <- logLikC(riskset = datalist$riskset,
+  #               logtheta = logtheta2,
+  #               delta = datalist$delta.prod,
+  #               I1 = datalist$I1,
+  #               I2 = datalist$I2,
+  #               I3 = datalist$I5) + penaltyLik - logSl/2 + logdetH/2
+  
+  L1 <- logLikC(riskset = t(datalist$riskset),
+                logtheta = t(logtheta2),
+                delta = t(datalist$delta.prod),
+                I1 = datalist$I1, I2 = datalist$I2, I3 = datalist$I5)
+  L2 <- 0
+  # L2 <- logLikC(riskset = datalist$riskset,
+  #               logtheta = logtheta2,
+  #               delta = datalist$delta.prod,
+  #               I1 = t(datalist$I2), I2 = t(datalist$I1), I3 = datalist$I6)
+  
+  ll <- L1 + L2 + penaltyLik/2
+  REML <- ll - logSl/2 + logdetH/2
+  
+  
+  # # List of gradient matrices for every spline coefficient
+  # M <- diag(df^2)
+  # deriv <- apply(M, 2, tensor,
+  #                t1 = datalist$X[,1], t2 = datalist$X[,2], degree = degree, df = df, knots = datalist$knots,
+  #                simplify = FALSE)
+  
+  
+  # gradient <- gradientC(riskset = datalist$riskset,
+  #                      logtheta = logtheta2,
+  #                      deriv = deriv,
+  #                      df = df,
+  #                      delta = datalist$delta.prod,
+  #                      I1 = datalist$I1,
+  #                      I2 = datalist$I2,
+  #                      I3 = datalist$I5,
+  #                      I4 = datalist$I6)
+  # 
+  # # TODO Controleer implementatie van hessian
+  # 
+  # hessian <- hessianC(riskset = datalist$riskset,
+  #                     logtheta = logtheta2,
+  #                     deriv = deriv,
+  #                     df = df,
+  #                     delta = datalist$delta.prod,
+  #                     I1 = datalist$I1,
+  #                     I2 = datalist$I2,
+  #                     I3 = datalist$I5)
+  # 
+  # attr(ll, "gradient") <- gradient
+  # attr(ll, "hessian") <- hessian
+  
+  # Merk op dat C++ code geïmplementeerd is voor -loglik
+  sign <- ifelse(isTRUE(minusLogLik), 1, -1)
+  
+  return(list(ll = sign*ll, REML = sign*REML))
+  
+}
+
 # EFS gebaseerd op de code van Simon Wood in het mgcv package (zie gam.fit4.r op github)
 # gam.control() details in mgcv.r op github
-EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(10,10), tol = 0.001, eps = 1e-10, lambda.max = exp(15), step.control = TRUE) { 
+EstimatePenal <- function(datalist, degree, S, lambda.init = c(10,10), tol = 0.001, eps = 1e-10, lambda.max = exp(15), step.control = TRUE) { 
   
   print("Extended Fellner-Schall method:")
   
@@ -791,6 +1032,162 @@ EstimatePenalAsym <- function(datalist, degree, S, lambda.init = c(10,10), tol =
     history = score[1:iter]))
 }
 
+EstimatePenal2 <- function(datalist, dim, degree = 3, bs = "bs", lambda.init = c(10,10), tol = 0.001, eps = 1e-10, lambda.max = exp(15), step.control = TRUE) { 
+  
+  print("Extended Fellner-Schall method:")
+  
+  tiny <- .Machine$double.eps^0.5
+  
+  obj1 <- WoodSpline(t = datalist$X[,1], dim = dim, degree = 3, eval.penalty = TRUE)
+  obj2 <- WoodSpline(t = datalist$X[,2], dim = dim, degree = 3, eval.penalty = TRUE)
+  
+  X1 <- obj1$X
+  X2 <- obj2$X
+  
+  S <- ReissTensorPenalty(obj1, obj2, degree = degree, bs = bs)
+  S1 <- S[[1]]
+  S2 <- S[[2]]
+  
+  lambda.new <- lambda.init # In voorbeelden van Wood (2017) is de initiele lambda = 1
+  
+  fit <- efsud.fit2(start = rep(1,df^2), X1 = X1, X2 = X2, datalist = datalist,
+                   # Sl = lambda.init*S
+                   Sl = lambda.init[1]*S1 + lambda.init[2]*S2
+  )
+  k <- 1
+  score <- rep(0, 200)
+  for (iter in 1:200) {
+    
+    l0 <- fit$REML
+    
+    lambda <- lambda.new
+    
+    # Some calculations to update lambda later...
+    Sl <- lambda[1]*S1 + lambda[2]*S2
+    # Sl <- lambda*S
+    Sl.inv <- MASS::ginv(Sl)
+    
+    # decomp <- eigen(hessian)
+    # A <- diag(abs(decomp$values))
+    # hessian <- decomp$vectors %*% A %*% t(decomp$vectors)
+    
+    
+    # Update ----
+    
+    # Calculate V
+    V <- solve(fit$hessian + Sl)
+    
+    # Calculate trSSj, trVS and bSb
+    trSSj <- trVS <- bSb <- rep(0, length(S))
+    for (i in 1:length(S)) {
+      trSSj[i] <- sum(diag(Sl.inv %*% S[[i]]))
+      trVS[i] <- sum(diag(V %*% S[[i]]))
+      bSb[i] <- t(fit$beta) %*% S[[i]] %*% fit$beta
+    }
+    
+    # trSSj <- sum(diag(Sl.inv %*% S))
+    # trVS <- sum(diag(V %*% S))
+    # bSb <- t(fit$beta) %*% S %*% fit$beta
+    
+    # Update lambdas
+    a <- pmax(tiny, trSSj - trVS)
+    update <- a/pmax(tiny, bSb)
+    update[a==0 & bSb==0] <- 1
+    update[!is.finite(update)] <- 1e6
+    lambda.new <- pmin(update*lambda, lambda.max)
+    
+    # Step length of update
+    max.step <- max(abs(lambda.new - lambda))
+    
+    # Create new S.lambda matrix
+    Sl.new <- lambda.new[1]*S1 + lambda.new[2]*S2
+    # Sl.new <- lambda.new*S
+    
+    fit <- efsud.fit2(start = fit$beta, X1 = X1, X2 = X2, datalist = datalist, Sl = Sl.new)
+    l1 <- fit$REML
+    
+    # Start of step control ----
+    if (step.control) {
+      
+      if (l1 > l0) { # Improvement
+        if(max.step < 1) { # Consider step extension
+          lambda2 <- pmin(lambda*update^(k*2), exp(12))
+          fit2 <- efsud.fit2(start = fit$beta, X1 = X1, X2 = X2, datalist = datalist,
+                            # Sl = lambda2*S
+                            Sl = lambda2[1]*S1 + lambda2[2]*S2
+          )
+          l2 <- fit2$REML
+          if (l2 > l1) { # Improvement - accept extension
+            lambda.new <- lambda2
+            l1 <- l2
+            fit <- fit2
+            k <- k*2
+          }
+        }
+      } else { # No improvement
+        lk <- l1
+        lambda3 <- lambda.new
+        while (lk < l0 && k > 1) { # Don't contract too much since the likelihood does not need to increase k > 0.001
+          k <- k/2 ## Contract step
+          lambda3 <- pmin(lambda*update^k, lambda.max)
+          fit <- efsud.fit2(start = fit$beta, X1 = X1, X2 = X2, datalist = datalist,
+                           # Sl = lambda3*S
+                           Sl = lambda3[1]*S1 + lambda3[2]*S2
+          )
+          lk <- fit$REML
+          
+          # k <- k + 1
+          # diff <- diff/2
+          # lambda3 <- lambda + diff
+          # lk <- wrapper(coef.vector = beta, degree = degree,
+          #               # Sl = lambda3[1]*S1 + lambda3[2]*S2,
+          #               Sl = lambda3*S,
+          #               H = hessian, minusLogLik = FALSE, datalist = datalist)
+        }
+        lambda.new <- lambda3
+        l1 <- lk
+        max.step <- max(abs(lambda.new - lambda))
+        if (k < 1) k <- 1
+      }
+    } # end of step length control
+    
+    # save loglikelihood value
+    score[iter] <- l1
+    
+    # Break procedures ----
+    
+    # Break procedure if REML change and step size are too small
+    if (iter > 3 && max.step < 0.5 && max(abs(diff(score[(iter-3):iter]))) < 0.01) {print("REML not changing"); break}
+    # Or break is likelihood does not change
+    if (l1 == l0) {print("Loglik not changing"); break}
+    # Stop if loglik is not changing
+    if (iter==1) old.ll <- fit$ll else {
+      if (abs(old.ll-fit$ll)<eps*abs(fit$ll)) {print("Loglik not changing"); break}  # *100
+      old.ll <- fit$ll
+    }
+    
+    # Print information while running...
+    print(paste0("Iteration ", iter,
+                 ": k = ", k,
+                 # " lambda = ", round(lambda.new,4),
+                 " lambda1 = ", round(lambda.new[1],4),
+                 " lambda2 = ", round(lambda.new[2],4),
+                 " ll = ", round(fit$ll,4),
+                 " REML = ", score[iter]))
+    
+  } # End of for loop
+  
+  if (iter < 200) print("Converged") else print("Number of iterations is too small")
+  
+  return(list(
+    beta = fit$beta,
+    lambda = lambda.new,
+    iterations = iter,
+    ll = fit$ll,
+    history = score[1:iter],
+    knots = list(knots1 = obj1$knots, knots2 = obj2$knots)))
+}
+
 efsud.fit <- function(start, degree, datalist, Sl) {
   beta <- multiroot(Score, start = start, rtol = 1e-10, degree = degree, datalist = datalist, Sl = Sl)$root
   H <- derivatives(coef.vector = beta, degree = degree, datalist = datalist, gradient = FALSE, hessian = TRUE)$hessian
@@ -799,6 +1196,18 @@ efsud.fit <- function(start, degree, datalist, Sl) {
                    Sl = Sl, H = H,
                    minusLogLik = FALSE,
                    datalist = datalist)
+  
+  return(list(beta = beta, hessian = H, REML = fit$REML, ll = fit$ll))
+}
+
+efsud.fit2 <- function(start, X1, X2, datalist, Sl) {
+  beta <- multiroot(Score2, start = start, rtol = 1e-10, X1 = X1, X2 = X2, Sl = Sl)$root
+  H <- derivatives2(coef.vector = beta, X1 = X1, X2 = X2, datalist = datalist, gradient = FALSE, hessian = TRUE)$hessian
+  fit <-  wrapper2(coef.vector = beta,
+                  X1 = X1, X2 = X2,
+                  Sl = Sl, H = H,
+                  minusLogLik = FALSE,
+                  datalist = datalist)
   
   return(list(beta = beta, hessian = H, REML = fit$REML, ll = fit$ll))
 }
