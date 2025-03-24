@@ -1,8 +1,6 @@
 library(MASS)
 library(mgcv)
 
-
-
 data("mcycle")
 
 source("motorcycle-functions.R")
@@ -11,9 +9,8 @@ gam.fit <- gam(accel ~ s(times, k = 20, bs = "ps"), data = mcycle, optimizer = "
 gam.fit$sp
 gam.fit$sig2
 
-
-fit <- EstimatePenal(dim = 20, lambda.init = 1, step.control = F, type = "ps", repara = TRUE, quantile = FALSE)
-fit2 <- EstimatePenal(dim = 20, lambda.init = 1, step.control = F, type = "bs", repara = TRUE, quantile = TRUE)
+fit <- EstimatePenal(dim = 20, lambda.init = 1, step.control = F, type = "ps", quantile = FALSE)
+fit2 <- EstimatePenal(dim = 20, lambda.init = 1, step.control = F, type = "bs", quantile = TRUE)
 y.ps <- fit$X %*% fit$beta
 y.bs <- fit2$X %*% fit2$beta
 
