@@ -1,5 +1,5 @@
 
-WoodSpline <- function(t, dim, degree = 3, eval.penalty = FALSE) {
+WoodSpline <- function(t, dim, degree = 3, type = NULL, quantile = FALSE, repara = FALSE, m2 = degree-1) {
   
   nk <- dim - degree + 1 # Number of "interior" knots (internal + boundary)
   
@@ -9,54 +9,99 @@ WoodSpline <- function(t, dim, degree = 3, eval.penalty = FALSE) {
   xl <- xl-xr*0.001; xu <- xu+xr*0.001
   dx <- (xu-xl)/(nk-1)
   k <- seq(xl-dx*degree,xu+dx*degree,length=nk+2*degree) # Vector of knots
-  # k.int <- quantile(t, probs = seq(0, 1, length = nk))[-c(1, nk)]
-  # k[(degree+2):(length(k)-(degree+1))] <- k.int
+  if (quantile) {
+    k.int <- quantile(t, probs = seq(0, 1, length = nk))[-c(1, nk)]
+    k[(degree+2):(length(k)-(degree+1))] <- k.int
+  }
   
   X <- splines::splineDesign(k, t, degree+1)
-  
-  P <- Q <- S <- NULL
-  if (eval.penalty) {
-    # int <- function(x,i,j,derivs) {m <- splineDesign(k, x, degree+1, derivs = derivs); m[,i]*m[,j]}
-    # 
-    # P <- Q <- matrix(NA, ncol = dim, nrow = dim)
-    # for (i in 1:dim) {
-    #   for (j in i:dim) {
-    #     Q[i,j] <- Q[j,i] <- integrate(int, lower = min(t), upper = max(t), i, j, derivs = 0, rel.tol = 1e-12)$value
-    #     P[i,j] <- P[j,i] <- integrate(int, lower = min(t), upper = max(t), i, j, derivs = 2, rel.tol = 1e-12)$value
-    #   }
-    # }
+
+  if (type == "bs") {
     
-    p <- degree - 2
+    pord <- degree - m2
     k0 <- k[(degree+1):(degree+nk)]
     h <- diff(k0)
-    h1 <- rep(h/p, each = p)
+    h1 <- rep(h/pord, each = pord)
     k1 <- cumsum(c(k0[1],h1))
-    G <- splines::splineDesign(k,k1,derivs = 2)
     
-    P <- H <- matrix(0, ncol = p+1, nrow = p+1)
-    for (i in 1:(p+1)) {
-      for (j in 1:(p+1)) {
-        P[i,j] <- (-1 + 2*(i-1)/p)^j
-        H[i,j] <- (1 + (-1)^(i+j-2))/(i+j-1)
-      }
+    D <- splines::splineDesign(k,k1,derivs = m2)
+    
+    P <- solve(matrix(rep(seq(-1,1,length=pord+1),pord+1)^rep(0:pord,each=pord+1),pord+1,pord+1))
+    i1 <- rep(1:(pord+1),pord+1)+rep(1:(pord+1),each=pord+1) ## i + j
+    H <- matrix((1+(-1)^(i1-2))/(i1-1),pord+1,pord+1)
+    W1 <- t(P)%*%H%*%P
+    h <- h/2 ## because we map integration interval to to [-1,1] for maximum stability
+    ## Create the non-zero diagonals of the W matrix... 
+    ld0 <- rep(sdiag(W1),length(h))*rep(h,each=pord+1)
+    i1 <- c(rep(1:pord,length(h)) + rep(0:(length(h)-1) * (pord+1),each=pord),length(ld0))
+    ld <- ld0[i1] ## extract elements for leading diagonal
+    i0 <- 1:(length(h)-1)*pord+1
+    i2 <- 1:(length(h)-1)*(pord+1)
+    ld[i0] <- ld[i0] + ld0[i2] ## add on extra parts for overlap
+    B <- matrix(0,pord+1,length(ld))
+    B[1,] <- ld
+    for (k in 1:pord) { ## create the other diagonals...
+      diwk <- sdiag(W1,k) ## kth diagonal of W1
+      ind <- 1:(length(ld)-k)
+      B[k+1,ind] <- (rep(h,each=pord)*rep(c(diwk,rep(0,k-1)),length(h)))[ind]  
     }
-    Wtilde <- t(solve(P)) %*% H %*% solve(P)
-    
-    W <- matrix(0, ncol = length(k1), nrow = length(k1))
-    for (q in 1:length(h)) {
-      for (i in 1:(p+1)) {
-        for (j in 1:(p+1)) {
-          W[i+p*q-p,j+p*q-p] <- h[q]*Wtilde[i,j]/2
-        }
-      }
+    ## ... now B contains the non-zero diagonals of W
+    B <- mgcv::bandchol(B) ## the banded cholesky factor.
+    ## Pre-Multiply D by the Cholesky factor...
+    D1 <- B[1,]*D
+    for (k in 1:pord) {
+      ind <- 1:(nrow(D)-k)
+      D1[ind,] <- D1[ind,] + B[k+1,ind] * D[ind+k,]
     }
+    S <- crossprod(D1)
+
     
-    S <- t(G) %*% W %*% G
+    # p <- degree - 2
+    # k0 <- k[(degree+1):(degree+nk)]
+    # h <- diff(k0)
+    # h1 <- rep(h/p, each = p)
+    # k1 <- cumsum(c(k0[1],h1))
+    # G <- splines::splineDesign(k,k1,derivs = 2)
+    # 
+    # P <- H <- matrix(0, ncol = p+1, nrow = p+1)
+    # for (i in 1:(p+1)) {
+    #   for (j in 1:(p+1)) {
+    #     P[i,j] <- (-1 + 2*(i-1)/p)^j
+    #     H[i,j] <- (1 + (-1)^(i+j-2))/(i+j-1)
+    #   }
+    # }
+    # Wtilde <- t(solve(P)) %*% H %*% solve(P)
+    # 
+    # W <- matrix(0, ncol = length(k1), nrow = length(k1))
+    # for (q in 1:length(h)) {
+    #   for (i in 1:(p+1)) {
+    #     for (j in 1:(p+1)) {
+    #       W[i+p*q-p,j+p*q-p] <- h[q]*Wtilde[i,j]/2
+    #     }
+    #   }
+    # }
+    # 
+    # S <- t(G) %*% W %*% G
     
     # Banded cholesky decomposition
     # R <- chol(W) # t(R) %*% R = W
     # D <- R %*% G # t(D) %*% D = S
     
+  } else if (type == "ps") {
+    S <- crossprod(diff(diag(dim), differences = m2))
+  } else S <- NULL
+  
+  if(repara) {
+    qrX <- qr(X)
+    R <- qr.R(qrX)
+    Q <- qr.Q(qrX)
+    Rinv <- solve(R)
+    eigenS <- eigen(t(Rinv) %*% S %*% Rinv, symmetric = TRUE)
+    Sprime <- diag(eigenS$values)
+    Xprime <- Q %*% eigenS$vectors
+    
+    S <- Sprime
+    X <- Xprime
   }
   
   return(list(X = X, knots = k, S = S))
@@ -119,20 +164,14 @@ hessian <- function(X, Sl = NULL) {
 }
 
 
-EstimatePenal <- function(dim = 10, lambda.init = 10, type = "bs", tol = 0.001, lambda.max = exp(15), step.control = TRUE) { 
+EstimatePenal <- function(dim = 10, lambda.init = 10, type = "bs", quantile = FALSE, repara = FALSE, tol = 0.001, lambda.max = exp(15), step.control = TRUE) { 
   
   tiny <- .Machine$double.eps^0.5
   
-  if (type == "bs") {
-    model <- WoodSpline(t = mcycle$times, dim = dim, degree = 3, eval.penalty = T)
-    S <- model$S
-  } else if (type == "ps") {
-    model <- WoodSpline(t = mcycle$times, dim = dim, degree = 3, eval.penalty = F)
-    S <- crossprod(diff(diag(dim), differences = 2))
-  }
-  
+  model <- WoodSpline(t = mcycle$times, dim = dim, degree = 3, type = type, repara = repara,  quantile = quantile)
   
   X <- model$X
+  S <- model$S
 
   lambda.new <- lambda.init # In voorbeelden van Wood (2017) is de initiele lambda = 1
   
