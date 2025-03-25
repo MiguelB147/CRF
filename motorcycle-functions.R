@@ -1,6 +1,7 @@
 
 WoodSpline <- function(t, dim, degree = 3, type = NULL, quantile = FALSE, scale = TRUE, m2 = degree-1) {
   
+  # Create knot sequence for spline ----
   nk <- dim - degree + 1 # Number of "interior" knots (internal + boundary)
   
   xl <- min(t)
@@ -16,8 +17,11 @@ WoodSpline <- function(t, dim, degree = 3, type = NULL, quantile = FALSE, scale 
   
   X <- splines::splineDesign(k, t, degree+1)
   
+  # Create penalty matrix S = t(D1) %*% D1 if necessary ----
   if (is.null(type)) {S <- D1 <- NULL}
   else if (type == "bs") {
+    
+    ## Integrated squared derivative penalty ----
     
     pord <- degree - m2
     k0 <- k[(degree+1):(degree+nk)]
@@ -89,6 +93,7 @@ WoodSpline <- function(t, dim, degree = 3, type = NULL, quantile = FALSE, scale 
     # D <- R %*% G # t(D) %*% D = S
     
   } else if (type == "ps") {
+    ## Discrete penalty ----
     D1 <- diff(diag(dim), differences = m2)
     S <- crossprod(D1)
   }
@@ -106,11 +111,13 @@ WoodSpline <- function(t, dim, degree = 3, type = NULL, quantile = FALSE, scale 
   #   X <- Xprime
   # }
   
+  # Scaling the penalty matrix S ----
   if (scale) {
     maXX <- norm(X,type="I")^2
     maS <- norm(S)/maXX
     S <- S/maS
-  } else S.scale <- NULL
+    D1 <- D1/sqrt(maS)
+  } else maS <- NULL
   
   return(list(X = X, knots = k, S = S, D = D1, S.scale = maS))
 }

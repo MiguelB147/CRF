@@ -5,97 +5,160 @@ theta.frank <- function(x,y,alpha) {
   return(A*C/B)
 }
 
-WoodSpline <- function(t, dim, degree = 3, knots = NULL, eval.penalty = FALSE) {
+WoodSpline <- function(t, dim, degree = 3, type = NULL, quantile = FALSE, scale = TRUE, m2 = degree-1) {
   
-  if (is.null(knots)) {
-    nk <- dim - degree + 1 # Number of "interior" knots (internal + boundary)
-    
-    xl <- min(t)
-    xu <- max(t)
-    xr <- xu - xl
-    xl <- xl-xr*0.001;
-    xu <- xu+xr*0.001
-    dx <- (xu-xl)/(nk-1)
-    k <- seq(xl-dx*degree,xu+dx*degree,length=nk+2*degree) # Vector of knots
+  # Create knot sequence for spline ----
+  nk <- dim - degree + 1 # Number of "interior" knots (internal + boundary)
+  
+  xl <- min(t)
+  xu <- max(t)
+  xr <- xu - xl
+  xl <- xl-xr*0.001; xu <- xu+xr*0.001
+  dx <- (xu-xl)/(nk-1)
+  k <- seq(xl-dx*degree,xu+dx*degree,length=nk+2*degree) # Vector of knots
+  if (quantile) {
     k.int <- quantile(t, probs = seq(0, 1, length = nk))[-c(1, nk)]
     k[(degree+2):(length(k)-(degree+1))] <- k.int
-  } else {k <- knots}
+  }
   
   X <- splines::splineDesign(k, t, degree+1)
   
-  D <- S <- NULL
-  if (eval.penalty) {
+  # Create penalty matrix S = t(D1) %*% D1 if necessary ----
+  if (is.null(type)) {S <- D1 <- NULL}
+  else if (type == "bs") {
     
-    p <- degree - 2
+    ## Integrated squared derivative penalty ----
+    
+    pord <- degree - m2
     k0 <- k[(degree+1):(degree+nk)]
     h <- diff(k0)
-    h1 <- rep(h/p, each = p)
+    h1 <- rep(h/pord, each = pord)
     k1 <- cumsum(c(k0[1],h1))
-    G <- splines::splineDesign(k,k1,derivs = 2)
     
-    P <- H <- matrix(0, ncol = p+1, nrow = p+1)
-    for (i in 1:(p+1)) {
-      for (j in 1:(p+1)) {
-        P[i,j] <- (-1 + 2*(i-1)/p)^j
-        H[i,j] <- (1 + (-1)^(i+j-2))/(i+j-1)
-      }
+    D <- splines::splineDesign(k,k1,derivs = m2)
+    
+    P <- solve(matrix(rep(seq(-1,1,length=pord+1),pord+1)^rep(0:pord,each=pord+1),pord+1,pord+1))
+    i1 <- rep(1:(pord+1),pord+1)+rep(1:(pord+1),each=pord+1) ## i + j
+    H <- matrix((1+(-1)^(i1-2))/(i1-1),pord+1,pord+1)
+    W1 <- t(P)%*%H%*%P
+    h <- h/2 ## because we map integration interval to to [-1,1] for maximum stability
+    ## Create the non-zero diagonals of the W matrix... 
+    ld0 <- rep(sdiag(W1),length(h))*rep(h,each=pord+1)
+    i1 <- c(rep(1:pord,length(h)) + rep(0:(length(h)-1) * (pord+1),each=pord),length(ld0))
+    ld <- ld0[i1] ## extract elements for leading diagonal
+    i0 <- 1:(length(h)-1)*pord+1
+    i2 <- 1:(length(h)-1)*(pord+1)
+    ld[i0] <- ld[i0] + ld0[i2] ## add on extra parts for overlap
+    B <- matrix(0,pord+1,length(ld))
+    B[1,] <- ld
+    for (k in 1:pord) { ## create the other diagonals...
+      diwk <- sdiag(W1,k) ## kth diagonal of W1
+      ind <- 1:(length(ld)-k)
+      B[k+1,ind] <- (rep(h,each=pord)*rep(c(diwk,rep(0,k-1)),length(h)))[ind]  
     }
-    Wtilde <- t(solve(P)) %*% H %*% solve(P)
-    
-    W <- matrix(0, ncol = length(k1), nrow = length(k1))
-    for (q in 1:length(h)) {
-      for (i in 1:(p+1)) {
-        for (j in 1:(p+1)) {
-          W[i+p*q-p,j+p*q-p] <- h[q]*Wtilde[i,j]/2
-        }
-      }
+    ## ... now B contains the non-zero diagonals of W
+    B <- mgcv::bandchol(B) ## the banded cholesky factor.
+    ## Pre-Multiply D by the Cholesky factor...
+    D1 <- B[1,]*D
+    for (k in 1:pord) {
+      ind <- 1:(nrow(D)-k)
+      D1[ind,] <- D1[ind,] + B[k+1,ind] * D[ind+k,]
     }
+    S <- crossprod(D1)
     
-    S <- t(G) %*% W %*% G
     
-    # Banded cholesky decomposition
-    R <- chol(W) # t(R) %*% R = W
-    D <- R %*% G # t(D) %*% D = S
-    
-    # int <- function(x,i,j,derivs) {m <- splines::splineDesign(k, x, degree+1, derivs = derivs); m[,i]*m[,j]}
+    # p <- degree - 2
+    # k0 <- k[(degree+1):(degree+nk)]
+    # h <- diff(k0)
+    # h1 <- rep(h/p, each = p)
+    # k1 <- cumsum(c(k0[1],h1))
+    # G <- splines::splineDesign(k,k1,derivs = 2)
     # 
-    # P <- Q <- matrix(NA, ncol = dim, nrow = dim)
-    # for (i in 1:dim) {
-    #   for (j in i:dim) {
-    #     Q[i,j] <- Q[j,i] <- integrate(int, lower = xl, upper = xu, rel.tol = 1e-10, i, j, derivs = 0)$value
-    #     P[i,j] <- P[j,i] <- integrate(int, lower = xl, upper = xu, rel.tol = 1e-10, i, j, derivs = 2)$value
+    # P <- H <- matrix(0, ncol = p+1, nrow = p+1)
+    # for (i in 1:(p+1)) {
+    #   for (j in 1:(p+1)) {
+    #     P[i,j] <- (-1 + 2*(i-1)/p)^j
+    #     H[i,j] <- (1 + (-1)^(i+j-2))/(i+j-1)
     #   }
     # }
+    # Wtilde <- t(solve(P)) %*% H %*% solve(P)
+    # 
+    # W <- matrix(0, ncol = length(k1), nrow = length(k1))
+    # for (q in 1:length(h)) {
+    #   for (i in 1:(p+1)) {
+    #     for (j in 1:(p+1)) {
+    #       W[i+p*q-p,j+p*q-p] <- h[q]*Wtilde[i,j]/2
+    #     }
+    #   }
+    # }
+    # 
+    # S <- t(G) %*% W %*% G
+    
+    # Banded cholesky decomposition
+    # R <- chol(W) # t(R) %*% R = W
+    # D <- R %*% G # t(D) %*% D = S
+    
+  } else if (type == "ps") {
+    ## Discrete penalty ----
+    D1 <- diff(diag(dim), differences = m2)
+    S <- crossprod(D1)
   }
-
-  return(list(X, knots = k, D = D, S = S))
+  
+  # if(repara) {
+  #   qrX <- qr(X)
+  #   R <- qr.R(qrX)
+  #   Q <- qr.Q(qrX)
+  #   Rinv <- solve(R)
+  #   eigenS <- eigen(t(Rinv) %*% S %*% Rinv, symmetric = TRUE)
+  #   Sprime <- diag(eigenS$values)
+  #   Xprime <- Q %*% eigenS$vectors
+  #   
+  #   S <- Sprime
+  #   X <- Xprime
+  # }
+  
+  # Scaling the penalty matrix S ----
+  if (scale) {
+    maXX <- norm(X,type="I")^2
+    maS <- norm(S)/maXX
+    S <- S/maS
+    D1 <- D1/sqrt(maS)
+  } else maS <- NULL
+  
+  return(list(X = X, knots = k, S = S, D = D1, S.scale = maS))
 }
 
 # See Reiss et al. (2014) 
-ReissTensorPenalty <- function(object1, object2, degree = 3, bs = "bs") {
+WoodPenalty <- function(object1, object2) {
   
-  if (bs == "bs") {
-    Pt <- object1$P
-    Ps <- object2$P
-    Qt <- object1$Q
-    Qs <- object2$Q
-    
-    S1 <- Ps %x% Qt
-    S2 <- Qs %x% Pt
-  } else if (bs == "ps") {
-    df <- ncol(object1$X)
-    
-    S1 <- crossprod(diff(diag(df^2), lag = df, differences = degree-1))
-    
-    P <- kronecker(diag(df), diff(diag(df), differences = degree-1))
-    S2 <- crossprod(P)
-  } else stop("Penalty type is not correctly specified")
+  df1 <- ncol(object1$X)
+  df2 <- ncol(object2$X)
   
-  return(list(S1,S2))
-}
-
-WoodTensorPenalty  <- function() {
+  D1 <- object1$D %x% diag(rep(1,df2))
+  D2 <- diag(rep(1,df1)) %x% object2$D
   
+  S1 <- crossprod(D1)
+  S2 <- crossprod(D2)
+  
+  # if (type == "bs") {
+  #   
+  #   D1 <- object1$D %x% diag(rep(1,df2))
+  #   D2 <- diag(rep(1,df1)) %x% object2$D
+  #   
+  #   S1 <- crossprod(D1)
+  #   S2 <- crossprod(D2)
+  #   
+  # } else if (type == "ps") {
+  # 
+  #   
+  #   S1 <- crossprod(diff(diag(df1^2), lag = df1, differences = degree-1))
+  #   
+  #   P <- kronecker(diag(df2), diff(diag(df2), differences = degree-1))
+  #   S2 <- crossprod(P)
+  #   
+  # } else stop("Penalty type is not correctly specified")
+  
+  return(list(S1 = S1,S2 = S2))
 }
 
 WoodTensor <- function(X1, X2, coef.vector) {
@@ -1032,19 +1095,19 @@ EstimatePenal <- function(datalist, degree, S, lambda.init = c(10,10), tol = 0.0
     history = score[1:iter]))
 }
 
-EstimatePenal2 <- function(datalist, dim, degree = 3, bs = "bs", lambda.init = c(10,10), tol = 0.001, eps = 1e-10, lambda.max = exp(15), step.control = TRUE) { 
+EstimatePenal2 <- function(datalist, dim, degree = 3, lambda.init = c(10,10), type = "bs", quantile = FALSE, scale = TRUE, tol = 0.001, eps = 1e-10, lambda.max = exp(15), step.control = TRUE) { 
   
   print("Extended Fellner-Schall method:")
   
   tiny <- .Machine$double.eps^0.5
   
-  obj1 <- WoodSpline(t = datalist$X[,1], dim = dim, degree = 3, eval.penalty = TRUE)
-  obj2 <- WoodSpline(t = datalist$X[,2], dim = dim, degree = 3, eval.penalty = TRUE)
+  obj1 <- WoodSpline(t = datalist$X[,1], dim = dim, degree = 3, scale = scale, quantile = quantile, type = type)
+  obj2 <- WoodSpline(t = datalist$X[,2], dim = dim, degree = 3, scale = scale, quantile = quantile, type = type)
   
   X1 <- obj1$X
   X2 <- obj2$X
   
-  S <- ReissTensorPenalty(obj1, obj2, degree = degree, bs = bs)
+  S <- WoodPenalty(obj1,obj2)
   S1 <- S[[1]]
   S2 <- S[[2]]
   

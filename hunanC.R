@@ -156,6 +156,25 @@ df = 6
 K <- 1000
 unif.ub <- NULL # 5 = 20% censoring, 2.3 = 40% censoring
 
+
+spline1 <- WoodSpline(datalist$X[,1], dim = 10, scale = FALSE, type = "ps")
+spline1$S
+spline2 <- WoodSpline(datalist$X[,2], dim = 10, scale = FALSE, type = "ps")
+spline2$S
+
+D1 <- spline1$D %x% diag(rep(1, 10))
+S1 <- crossprod(D1)
+
+D2 <- diag(rep(1, 10)) %x% spline2$D
+S2 <- crossprod(D2)
+
+S12 <- ReissTensorPenalty(spline1, spline2, degree = 3, type = "ps")
+
+head(S1)
+head(S12$S1)
+head(S2)
+head(S12$S2)
+
 set.seed(123)
 datalist <- SimData(K = K, df = df, degree = degree, unif.ub = unif.ub)
 

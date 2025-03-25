@@ -103,7 +103,8 @@ WoodSpline <- function(t, dim, degree = 3, type = NULL, quantile = FALSE, scale 
     maXX <- norm(X,type="I")^2
     maS <- norm(S)/maXX
     S <- S/maS
-  } else S.scale <- NULL
+    D1 <- D1/maS
+  } else maS <- NULL
 
   
   return(list(X = X, knots = k, S = S, D = D1, S.scale = maS))
