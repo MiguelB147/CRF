@@ -27,3 +27,39 @@ lines(sort(mcycle$times), y.ps[order(mcycle$times)], col = "blue")
 lines(sort(mcycle$times), y.bs[order(mcycle$times)], col = "red")
 legend("topleft", legend = c("mgcv - ps", "uniform", "quantile"), lty = rep(1,3), col = c("black", "blue", "red"))
 dev.off()
+
+
+x = mcycle$times
+n = length(x)
+k = round(quantile(unique(x), seq(0,1,length = 10)),1)
+nk = 10
+h <- diff(k)
+
+pos <- vector("numeric", length = n)
+for (i in 1:n) {
+  xi <- x[i]
+  j = nk
+  while (xi <= k[j]) {
+    if (j > 1) {
+      j <- j-1
+    } else break
+  }
+  pos[i] <- j
+}
+
+am <- (k[pos+1] - x)/h[pos]
+ap <- (x - k[pos])/h[pos]
+cm <- ( (k[pos+1] - x)^3/h[pos] - h[pos]*(k[pos+1] - x))/6
+cp <- ( (x - k[pos])^3/h[pos] - h[pos]*(x - k[pos]))/6
+
+D <- B <- matrix(0, ncol = 8, nrow = nk)
+for (i in 1:(nk-2)) {
+  D[i,i] <- 1/h[i]
+  D[i,i+1] <-  -1/h[i] - 1/h[i+1]
+  D[i,i+2] <-  1/h[i+1]
+  
+  B[i,i] <- (h[i] + h[i+1])/3
+  if (i < nk-2) {
+    B[i,i+1] <- B[i+1,i] <- h[i+1]/6
+  }
+}

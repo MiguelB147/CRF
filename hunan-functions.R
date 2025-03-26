@@ -1,11 +1,41 @@
-theta.frank <- function(x,y,alpha) {
+row.kronecker <- 
+  function(X, Y){
+    ### row-wise kronecker product
+    ### Nathaniel E. Helwig (helwig@umn.edu)
+    ### Aug 6, 2023
+    
+    nx <- nrow(X)
+    ny <- nrow(Y)
+    if(nx != ny) stop("Inputs 'X' and 'Y' must have the same number of rows")
+    px <- ncol(X)
+    py <- ncol(Y)
+    xnames <- colnames(X)
+    if(is.null(xnames)) xnames <- paste0("X", 1:px)
+    ynames <- colnames(Y)
+    if(is.null(ynames)) ynames <- paste0("Y", 1:py)
+    znames <- NULL
+    Z <- matrix(0.0, nrow = nx, ncol = px * py)
+    for(j in 1:px){
+      index <- 1:py + (j - 1) * py
+      Z[,index] <- X[,j] * Y
+      znames <- c(znames, paste0(xnames[j], ":", ynames))
+    }
+    colnames(Z) <- znames
+    return(Z)
+  }
+
+theta.frank <- function(x,y,alpha=0.0023) {
   A <- (alpha-1)*log(alpha)*alpha^(2-exp(-x)-exp(-y))
   B <- (alpha^(1-exp(-x))-alpha)*(alpha^(1-exp(-y))-alpha)
   C <- -1 + exp(-x) + exp(-y) + log(1+ (alpha^(1-exp(-x))-1)*(alpha^(1-exp(-y))-1)/(alpha-1), base = alpha)
   return(A*C/B)
+  # u <- cbind(punif(x, 0, 5), punif(y,0,5))
+  # s <- pCopula(u, frankCopula(param = alpha))
+  # CRF <- s*alpha/(1-exp(-alpha*s))
+  # return(CRF)
 }
 
-WoodSpline <- function(t, dim, degree = 3, type = NULL, quantile = FALSE, scale = TRUE, m2 = degree-1) {
+WoodSpline <- function(t, dim, degree = 3, type = "ps", quantile = FALSE, scale = TRUE, m2 = degree-1) {
   
   # Create knot sequence for spline ----
   nk <- dim - degree + 1 # Number of "interior" knots (internal + boundary)
@@ -15,27 +45,26 @@ WoodSpline <- function(t, dim, degree = 3, type = NULL, quantile = FALSE, scale 
   xr <- xu - xl
   xl <- xl-xr*0.001; xu <- xu+xr*0.001
   dx <- (xu-xl)/(nk-1)
-  k <- seq(xl-dx*degree,xu+dx*degree,length=nk+2*degree) # Vector of knots
+  knots <- seq(xl-dx*degree,xu+dx*degree,length=nk+2*degree) # Vector of knots
   if (quantile) {
     k.int <- quantile(t, probs = seq(0, 1, length = nk))[-c(1, nk)]
-    k[(degree+2):(length(k)-(degree+1))] <- k.int
+    knots[(degree+2):(length(knots)-(degree+1))] <- k.int
   }
   
-  X <- splines::splineDesign(k, t, degree+1)
+  X <- splines::splineDesign(knots, t, degree+1)
   
   # Create penalty matrix S = t(D1) %*% D1 if necessary ----
-  if (is.null(type)) {S <- D1 <- NULL}
-  else if (type == "bs") {
+  if (type == "bs") {
     
     ## Integrated squared derivative penalty ----
     
     pord <- degree - m2
-    k0 <- k[(degree+1):(degree+nk)]
+    k0 <- knots[(degree+1):(degree+nk)]
     h <- diff(k0)
     h1 <- rep(h/pord, each = pord)
     k1 <- cumsum(c(k0[1],h1))
     
-    D <- splines::splineDesign(k,k1,derivs = m2)
+    D <- splines::splineDesign(knots,k1,derivs = m2)
     
     P <- solve(matrix(rep(seq(-1,1,length=pord+1),pord+1)^rep(0:pord,each=pord+1),pord+1,pord+1))
     i1 <- rep(1:(pord+1),pord+1)+rep(1:(pord+1),each=pord+1) ## i + j
@@ -43,7 +72,7 @@ WoodSpline <- function(t, dim, degree = 3, type = NULL, quantile = FALSE, scale 
     W1 <- t(P)%*%H%*%P
     h <- h/2 ## because we map integration interval to to [-1,1] for maximum stability
     ## Create the non-zero diagonals of the W matrix... 
-    ld0 <- rep(sdiag(W1),length(h))*rep(h,each=pord+1)
+    ld0 <- rep(mgcv::sdiag(W1),length(h))*rep(h,each=pord+1)
     i1 <- c(rep(1:pord,length(h)) + rep(0:(length(h)-1) * (pord+1),each=pord),length(ld0))
     ld <- ld0[i1] ## extract elements for leading diagonal
     i0 <- 1:(length(h)-1)*pord+1
@@ -52,7 +81,7 @@ WoodSpline <- function(t, dim, degree = 3, type = NULL, quantile = FALSE, scale 
     B <- matrix(0,pord+1,length(ld))
     B[1,] <- ld
     for (k in 1:pord) { ## create the other diagonals...
-      diwk <- sdiag(W1,k) ## kth diagonal of W1
+      diwk <- mgcv::sdiag(W1,k) ## kth diagonal of W1
       ind <- 1:(length(ld)-k)
       B[k+1,ind] <- (rep(h,each=pord)*rep(c(diwk,rep(0,k-1)),length(h)))[ind]  
     }
@@ -125,7 +154,7 @@ WoodSpline <- function(t, dim, degree = 3, type = NULL, quantile = FALSE, scale 
     D1 <- D1/sqrt(maS)
   } else maS <- NULL
   
-  return(list(X = X, knots = k, S = S, D = D1, S.scale = maS))
+  return(list(X = X, knots = knots, S = S, D = D1, S.scale = maS))
 }
 
 # See Reiss et al. (2014) 
@@ -168,6 +197,19 @@ WoodTensor <- function(X1, X2, coef.vector) {
   spline <- X1 %*% coef.matrix %*% t(X2)
   
   return(spline)
+}
+
+WoodTensor.predict <- function(t1, t2, fit) {
+
+  X1 <- splines::splineDesign(fit$knots[[1]], t1, ord = fit$splinepar[["degree"]]+1)
+  X2 <- splines::splineDesign(fit$knots[[2]], t2, ord = fit$splinepar[["degree"]]+1)
+
+  X <- row.kronecker(X1,X2)
+
+  spline <- X %*% fit$beta
+
+  return(exp(spline))
+  
 }
 
 
@@ -589,17 +631,22 @@ SimData <- function (K, df, degree, unif.ub, alpha = 0.0023) {
   
   u1 <- runif(K, 0, 1)
   u2 <- runif(K, 0, 1)
-  
+
   a <- alpha^u1 + (alpha - alpha^u1)*u2
-  
+
   # Fan 2000
   T1 <- -log(u1)
   T2 <- -log(log(a/(a+(1-alpha)*u2),base = alpha))
   
+  # U <- rCopula(K, frankCopula(alpha))
+  # 
+  # T1 <- 5*U[,1]
+  # T2 <- 5*U[,2]
+  # 
   if (is.null(unif.ub)) {
     # Fan 2000
-    X1 <- -log(u1)
-    X2 <- -log(log(a/(a+(1-alpha)*u2),base = alpha))
+    X1 <- T1
+    X2 <- T2
     
     X <- as.matrix(cbind(X1,X2))
     
@@ -846,7 +893,7 @@ wrapper <- function(coef.vector, degree, datalist, Sl = NULL, H = NULL, minusLog
   
 }
 
-wrapper2 <- function(coef.vector, X1, X2, Sl = NULL, H = NULL, minusLogLik=TRUE) { # H is hier gewoon de unpenalized hessian
+wrapper2 <- function(coef.vector, X1, X2, datalist, Sl = NULL, H = NULL, minusLogLik=TRUE) { # H is hier gewoon de unpenalized hessian
   
   # Check whether penalty is applied
   if (is.null(Sl)) {
@@ -1095,14 +1142,14 @@ EstimatePenal <- function(datalist, degree, S, lambda.init = c(10,10), tol = 0.0
     history = score[1:iter]))
 }
 
-EstimatePenal2 <- function(datalist, dim, degree = 3, lambda.init = c(10,10), type = "bs", quantile = FALSE, scale = TRUE, tol = 0.001, eps = 1e-10, lambda.max = exp(15), step.control = TRUE) { 
+EstimatePenal2 <- function(datalist, dim, degree = 3, lambda.init = c(10,10), start = rep(1,dim^2), type = "bs", quantile = FALSE, scale = TRUE, tol = 0.001, eps = 1e-10, lambda.max = exp(15), step.control = FALSE) { 
   
   print("Extended Fellner-Schall method:")
   
   tiny <- .Machine$double.eps^0.5
   
-  obj1 <- WoodSpline(t = datalist$X[,1], dim = dim, degree = 3, scale = scale, quantile = quantile, type = type)
-  obj2 <- WoodSpline(t = datalist$X[,2], dim = dim, degree = 3, scale = scale, quantile = quantile, type = type)
+  obj1 <- WoodSpline(t = datalist$X[,1], dim = dim, degree = 3, type = type, scale = scale, quantile = quantile)
+  obj2 <- WoodSpline(t = datalist$X[,2], dim = dim, degree = 3, type = type, scale = scale, quantile = quantile)
   
   X1 <- obj1$X
   X2 <- obj2$X
@@ -1113,10 +1160,9 @@ EstimatePenal2 <- function(datalist, dim, degree = 3, lambda.init = c(10,10), ty
   
   lambda.new <- lambda.init # In voorbeelden van Wood (2017) is de initiele lambda = 1
   
-  fit <- efsud.fit2(start = rep(1,df^2), X1 = X1, X2 = X2, datalist = datalist,
+  fit <- efsud.fit2(start = start, X1 = X1, X2 = X2, datalist = datalist,
                    # Sl = lambda.init*S
-                   Sl = lambda.init[1]*S1 + lambda.init[2]*S2
-  )
+                   Sl = lambda.init[1]*S1 + lambda.init[2]*S2)
   k <- 1
   score <- rep(0, 200)
   for (iter in 1:200) {
@@ -1220,14 +1266,14 @@ EstimatePenal2 <- function(datalist, dim, degree = 3, lambda.init = c(10,10), ty
     # Break procedures ----
     
     # Break procedure if REML change and step size are too small
-    if (iter > 3 && max.step < 0.5 && max(abs(diff(score[(iter-3):iter]))) < 0.01) {print("REML not changing"); break}
+    if (iter > 3 && max.step < 0.5 && max(abs(diff(score[(iter-3):iter]))) < 0.5) {print("REML not changing"); break}
     # Or break is likelihood does not change
     if (l1 == l0) {print("Loglik not changing"); break}
     # Stop if loglik is not changing
-    if (iter==1) old.ll <- fit$ll else {
-      if (abs(old.ll-fit$ll)<eps*abs(fit$ll)) {print("Loglik not changing"); break}  # *100
-      old.ll <- fit$ll
-    }
+    # if (iter==1) old.ll <- fit$ll else {
+    #   if (abs(old.ll-fit$ll)<eps*abs(fit$ll)) {print("Loglik not changing"); break}  # *100
+    #   old.ll <- fit$ll
+    # }
     
     # Print information while running...
     print(paste0("Iteration ", iter,
@@ -1248,6 +1294,7 @@ EstimatePenal2 <- function(datalist, dim, degree = 3, lambda.init = c(10,10), ty
     iterations = iter,
     ll = fit$ll,
     history = score[1:iter],
+    splinepar = list(dim = dim, degree = degree),
     knots = list(knots1 = obj1$knots, knots2 = obj2$knots)))
 }
 
@@ -1264,7 +1311,7 @@ efsud.fit <- function(start, degree, datalist, Sl) {
 }
 
 efsud.fit2 <- function(start, X1, X2, datalist, Sl) {
-  beta <- multiroot(Score2, start = start, rtol = 1e-10, X1 = X1, X2 = X2, Sl = Sl)$root
+  beta <- multiroot(Score2, start = start, rtol = 1e-10, X1 = X1, X2 = X2, Sl = Sl, datalist = datalist)$root
   H <- derivatives2(coef.vector = beta, X1 = X1, X2 = X2, datalist = datalist, gradient = FALSE, hessian = TRUE)$hessian
   fit <-  wrapper2(coef.vector = beta,
                   X1 = X1, X2 = X2,

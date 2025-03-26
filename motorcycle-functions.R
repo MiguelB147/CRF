@@ -9,10 +9,10 @@ WoodSpline <- function(t, dim, degree = 3, type = NULL, quantile = FALSE, scale 
   xr <- xu - xl
   xl <- xl-xr*0.001; xu <- xu+xr*0.001
   dx <- (xu-xl)/(nk-1)
-  k <- seq(xl-dx*degree,xu+dx*degree,length=nk+2*degree) # Vector of knots
+  knots <- seq(xl-dx*degree,xu+dx*degree,length=nk+2*degree) # Vector of knots
   if (quantile) {
     k.int <- quantile(t, probs = seq(0, 1, length = nk))[-c(1, nk)]
-    k[(degree+2):(length(k)-(degree+1))] <- k.int
+    knots[(degree+2):(length(k)-(degree+1))] <- k.int
   }
   
   X <- splines::splineDesign(k, t, degree+1)
@@ -24,12 +24,12 @@ WoodSpline <- function(t, dim, degree = 3, type = NULL, quantile = FALSE, scale 
     ## Integrated squared derivative penalty ----
     
     pord <- degree - m2
-    k0 <- k[(degree+1):(degree+nk)]
+    k0 <- knots[(degree+1):(degree+nk)]
     h <- diff(k0)
     h1 <- rep(h/pord, each = pord)
     k1 <- cumsum(c(k0[1],h1))
     
-    D <- splines::splineDesign(k,k1,derivs = m2)
+    D <- splines::splineDesign(knots,k1,derivs = m2)
     
     P <- solve(matrix(rep(seq(-1,1,length=pord+1),pord+1)^rep(0:pord,each=pord+1),pord+1,pord+1))
     i1 <- rep(1:(pord+1),pord+1)+rep(1:(pord+1),each=pord+1) ## i + j
@@ -119,7 +119,7 @@ WoodSpline <- function(t, dim, degree = 3, type = NULL, quantile = FALSE, scale 
     D1 <- D1/sqrt(maS)
   } else maS <- NULL
   
-  return(list(X = X, knots = k, S = S, D = D1, S.scale = maS))
+  return(list(X = X, knots = knots, S = S, D = D1, S.scale = maS))
 }
 
 
