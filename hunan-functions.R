@@ -35,7 +35,7 @@ theta.frank <- function(x,y,alpha=0.0023) {
   # return(CRF)
 }
 
-WoodSpline <- function(t, dim, degree = 3, type = "ps", quantile = FALSE, scale = TRUE, m2 = degree-1) {
+WoodSpline <- function(t, dim, degree = 3, type = "ps", quantile = FALSE, scale = TRUE, repara = TRUE, m2 = degree-1) {
   
   # Create knot sequence for spline ----
   nk <- dim - degree + 1 # Number of "interior" knots (internal + boundary)
@@ -154,6 +154,13 @@ WoodSpline <- function(t, dim, degree = 3, type = "ps", quantile = FALSE, scale 
     D1 <- D1/sqrt(maS)
   } else maS <- NULL
   
+  if (repara) {
+    G <- t(splines::splineDesign(knots, seq(min(t),max(t),length=dim), degree+1))
+    Gm <- solve(G)
+    X <- X %*% Gm
+    S <-  t(Gm) %*% S %*% Gm
+  }
+  
   return(list(X = X, knots = knots, S = S, D = D1, S.scale = maS))
 }
 
@@ -163,11 +170,14 @@ WoodPenalty <- function(object1, object2) {
   df1 <- ncol(object1$X)
   df2 <- ncol(object2$X)
   
-  D1 <- object1$D %x% diag(rep(1,df2))
-  D2 <- diag(rep(1,df1)) %x% object2$D
+  # D1 <- object1$D %x% diag(rep(1,df2))
+  # D2 <- diag(rep(1,df1)) %x% object2$D
+  # 
+  # S1 <- crossprod(D1)
+  # S2 <- crossprod(D2)
   
-  S1 <- crossprod(D1)
-  S2 <- crossprod(D2)
+  S1 <- object1$S %x% diag(rep(1,df2))
+  S2 <- diag(rep(1,df1)) %x% object1$S
   
   # if (type == "bs") {
   #   
@@ -1142,14 +1152,14 @@ EstimatePenal <- function(datalist, degree, S, lambda.init = c(10,10), tol = 0.0
     history = score[1:iter]))
 }
 
-EstimatePenal2 <- function(datalist, dim, degree = 3, lambda.init = c(10,10), start = rep(1,dim^2), type = "bs", quantile = FALSE, scale = TRUE, tol = 0.001, eps = 1e-10, lambda.max = exp(15), step.control = FALSE) { 
+EstimatePenal2 <- function(datalist, dim, degree = 3, lambda.init = c(10,10), start = rep(1,dim^2), type = "bs", quantile = FALSE, scale = FALSE, repara = FALSE, tol = 0.001, eps = 1e-10, lambda.max = exp(15), step.control = FALSE) { 
   
   print("Extended Fellner-Schall method:")
   
   tiny <- .Machine$double.eps^0.5
   
-  obj1 <- WoodSpline(t = datalist$X[,1], dim = dim, degree = 3, type = type, scale = scale, quantile = quantile)
-  obj2 <- WoodSpline(t = datalist$X[,2], dim = dim, degree = 3, type = type, scale = scale, quantile = quantile)
+  obj1 <- WoodSpline(t = datalist$X[,1], dim = dim, degree = 3, type = type, scale = scale, repara = repara, quantile = quantile)
+  obj2 <- WoodSpline(t = datalist$X[,2], dim = dim, degree = 3, type = type, scale = scale, repara = repara, quantile = quantile)
   
   X1 <- obj1$X
   X2 <- obj2$X

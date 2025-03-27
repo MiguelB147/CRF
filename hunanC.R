@@ -184,7 +184,7 @@ datalist <- SimData(K = K, df = df, degree = degree, unif.ub = unif.ub, alpha = 
 # fit <- EstimatePenal(datalist = datalist, degree = degree, S = S, lambda.init = c(10,10), step.control = F)
 
 beta.start <- fit7bsscale$beta
-fit7bsquant <- EstimatePenal2(datalist = datalist, dim = 7, start = beta.start, type = "bs", lambda.init = c(10,10), scale = FALSE, quantile = TRUE)
+fit7bsquant <- EstimatePenal2(datalist = datalist, dim = 7, type = "ps", lambda.init = c(10,10), scale = FALSE, repara = TRUE, quantile = FALSE)
 
 
 test <- efsud.fit(fit$beta, degree = degree, datalist = datalist, Sl = 2*S[[1]] + 0*S[[2]])
