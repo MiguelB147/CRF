@@ -627,7 +627,7 @@ Score2 <- function(coef.vector, X1, X2, datalist, Sl = NULL) {
 #   return(-(L1+L2))
 # }
 
-SimData <- function (K, df, degree, unif.ub, alpha = 0.0023) {
+SimData <- function (K, unif.ub, alpha = 0.0023) {
   
   u1 <- runif(K, 0, 1)
   u2 <- runif(K, 0, 1)
