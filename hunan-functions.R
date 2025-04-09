@@ -274,11 +274,12 @@ WoodSpline <- function(t, dim, degree = 3, type = "ps", quantile = FALSE, scale 
     sv <- svd(splines::splineDesign(knots, seq(min(t),max(t),length=dim), degree+1))
     if (sv$d[dim]/sv$d[1] < .Machine$double.eps^.66) {
       warning("Reparametrization unstable. Original model matrix returned")
+      XP <- NULL
     } else {
       XP <- sv$v%*%(t(sv$u)/sv$d)
       X <- X %*% XP
       S <- t(XP) %*% S %*% XP
-      S <- S/eigen(S,symmetric=TRUE,only.values=TRUE)$values[1]
+      # S <- S/eigen(S,symmetric=TRUE,only.values=TRUE)$values[1]
     }
   } else {XP <- NULL}
   

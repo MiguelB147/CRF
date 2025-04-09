@@ -158,25 +158,27 @@ unif.ub <- NULL # 5 = 20% censoring, 2.3 = 40% censoring
 set.seed(123)
 datalist <- SimData(K = K)
 
-fit <- EstimatePenal2(datalist = datalist, dim = 7, lambda.init = c(100,100), repara = TRUE)
+fit <- EstimatePenal2(datalist = datalist, dim = 7, lambda.init = c(100,100), repara = FALSE)
 
 plot.grid <- expand.grid(seq(0.25,3,by=0.25), seq = seq(0.1,3,by = 0.05))
 names(plot.grid) <- c("time1","time2")
-# plot.grid$true <- theta.mix(plot.grid$time1, plot.grid$time2)
-plot.grid$true <- theta.frank(plot.grid$time1, plot.grid$time2)
+plot.grid$true <- theta.mix(plot.grid$time1, plot.grid$time2)
+# plot.grid$true <- theta.frank(plot.grid$time1, plot.grid$time2)
 CRF <- WoodTensor.predict(plot.grid$time1, plot.grid$time2, fit)
 
+pdf("mixure7ps.pdf")
 par(mfrow = c(2,3))
 for (i in unique(plot.grid$time1)) {
   plottext <- paste0("t[1] == ", i)
   plot(x = plot.grid$time2[plot.grid$time1 == i],
        y = plot.grid$true[plot.grid$time1 == i],
        type = 'l', lwd = 2, col = "grey",
-       ylim = c(0,5),
+       ylim = c(0,3),
        ylab = "CRF", xlab = expression(t[2]), main = parse(text = plottext))
   lines(x = plot.grid$time2[plot.grid$time1 == i], y = CRF[plot.grid$time1 == i], col = "red", lwd = 2)
   }
 par(mfrow = c(1,1))
+dev.off()
 
 # CRF <- mapply(function(x,y) WoodTensor.predict(x, y, fit),
 #               plot.grid$time1,
