@@ -1,5 +1,4 @@
-row.kronecker <- 
-  function(X, Y){
+row.kronecker <- function(X, Y){
     ### row-wise kronecker product
     ### Nathaniel E. Helwig (helwig@umn.edu)
     ### Aug 6, 2023
@@ -34,6 +33,101 @@ theta.frank <- function(x,y,alpha=0.0023) {
   # CRF <- s*alpha/(1-exp(-alpha*s))
   # return(CRF)
 }
+
+theta.mix <- function(t1, t2, w = c(0.2,0.4,0.4), alpha = c(2,3,1.25)) {
+  
+  S1 <- exp(-t1)
+  S2 <- exp(-t2)
+  
+  # Clayton
+  kappa <- S1^(-alpha[1]) + S2^(-alpha[1])
+  clayton.00 <- kappa^(-1/alpha[1])
+  clayton.10 <- kappa^(-1/alpha[1]-1)*S1^(-alpha[1]-1)
+  clayton.01 <- kappa^(-1/alpha[1]-1)*S2^(-alpha[1]-1)
+  clayton.11 <- (1+alpha[1])*S1^(-alpha[1]-1)*S2^(-alpha[1]-1)*kappa^(-1/alpha[1]-2)
+  
+  # Frank
+  phi <- exp(-alpha[2])-1
+  mu1 <- exp(-alpha[2]*S1) - 1
+  mu2 <- exp(-alpha[2]*S2) - 1
+  frank.00 <- (-1/alpha[2])*log(1 + mu1*mu2/phi)
+  frank.10 <- mu2*(mu1 + 1)*phi^(-1)/(1+mu1*mu2*phi^(-1))
+  frank.01 <- mu1*(mu2 + 1)*phi^(-1)/(1+mu1*mu2*phi^(-1))
+  frank.11 <- -alpha[2]*phi^(-1)*(mu1+1)*(mu2+1)/(1+phi^(-1)*mu1*mu2)^2
+  
+  # Gumbel
+  
+  # cop = copula::gumbelCopula(1.25)
+  # cbind(gumbel.00, copula::pCopula(cbind(S1,S2), cop))
+  # cbind(gumbel.11, copula::dCopula(cbind(S1,S2), cop))
+  
+  
+  nu <- (-log(S1))^alpha[3] + (-log(S2))^alpha[3]
+  nu1 <- (-log(S1))^(alpha[3]-1)/S1
+  nu2 <- (-log(S2))^(alpha[3]-1)/S2
+  gumbel.00 <- exp( -nu^(1/alpha[3]) )
+  gumbel.10 <- gumbel.00*nu^(1/alpha[3]-1)*nu1
+  gumbel.01 <- gumbel.00*nu^(1/alpha[3]-1)*nu2
+  gumbel.11 <- gumbel.00*nu1*nu2*(nu^(2/alpha[3] - 2) + (alpha[3]-1)*nu^(1/alpha[3] - 2) )
+  
+  C00 <- cbind(clayton.00, frank.00, gumbel.00) %*% w
+  C10 <- cbind(clayton.10, frank.10, gumbel.10) %*% w
+  C01 <- cbind(clayton.01, frank.01, gumbel.01) %*% w
+  C11 <- cbind(clayton.11, frank.11, gumbel.11) %*% w
+  
+  CRF <- C00*C11/(C01*C10)
+  
+  return(CRF)
+  
+}
+
+theta.mix2 <- function(t1, t2, w = c(0.2,0.4,0.4), alpha = c(2,3,1.25)) {
+  
+  S1 <- exp(-t1)
+  S2 <- exp(-t2)
+  S <- cbind(S1,S2)
+  
+  mx <- copula::mixCopula(list(copula::claytonCopula(alpha[1], dim=2),
+                               copula::frankCopula(alpha[2], dim=2),
+                               copula::gumbelCopula(alpha[3], dim=2)),
+                          w = w)
+  
+  C00 <- copula::pCopula(S, mx)
+  C11 <- copula::dCopula(S, mx)
+  C10 <- copula::cCopula(S, mx, indices = 2)
+  C01 <- copula::cCopula(S, mx, indices = 1)
+  
+  return(C00*C11/(C10*C01))
+  
+}
+
+# theta.frank2 <- function(t1, t2, alpha) {
+#   
+#   S1 <- exp(-t1)
+#   S2 <- exp(-t2)
+#   
+#   # Frank
+#   phi <- exp(-alpha)-1
+#   
+#   noemer <- (exp(-alpha*S1) - 1)*(exp(-alpha*S2) - 1)
+#   teller <- log(1+noemer/phi)
+# 
+#   CRF <- phi*teller/noemer
+#   
+#   return(CRF)
+#   
+# }
+
+# theta.gumbel <- function(t1,t2,alpha) {
+#   S1 <- exp(-t1)
+#   S2 <- exp(-t2)
+#   
+#   CRF = 1+(alpha-1)*( (-log(S1))^alpha + (-log(S2))^alpha )^(-1/alpha)
+#   
+#   return(CRF)
+# }
+
+
 
 WoodSpline <- function(t, dim, degree = 3, type = "ps", quantile = FALSE, scale = TRUE, repara = TRUE, m2 = degree-1) {
   
@@ -131,6 +225,24 @@ WoodSpline <- function(t, dim, degree = 3, type = "ps", quantile = FALSE, scale 
     ## Discrete penalty ----
     D1 <- diff(diag(dim), differences = m2)
     S <- crossprod(D1)
+  } else if (type == "gps") {
+    M1 <- M2 <- c()
+    M <- diff(diag(dim))
+    
+    #W1
+    for (i in 1:(dim-1)) {
+      M1[i] <- knots[degree+1+i] - knots[i+1]
+    }
+    # W2
+    for (i in 1:(dim-2)) {
+      M2[i] <- knots[degree+1+i] - knots[i+2]
+    }
+    
+    W1 <- diag(M1)/(degree+1-1)
+    W2 <- diag(M2)/(degree+1-2)
+    
+    D1 <- solve(W2) %*% diff(diag(dim-1)) %*% solve(W1) %*% diff(diag(dim))
+    S <- crossprod(D1)
   }
   
   # if(repara) {
@@ -155,13 +267,22 @@ WoodSpline <- function(t, dim, degree = 3, type = "ps", quantile = FALSE, scale 
   } else maS <- NULL
   
   if (repara) {
-    G <- t(splines::splineDesign(knots, seq(min(t),max(t),length=dim), degree+1))
-    Gm <- solve(G)
-    X <- X %*% Gm
-    S <-  t(Gm) %*% S %*% Gm
-  }
+    # G <- t(splines::splineDesign(knots, seq(min(t),max(t),length=dim), degree+1))
+    # Gm <- solve(G)
+    # X <- X %*% Gm
+    # S <-  t(Gm) %*% S %*% Gm
+    sv <- svd(splines::splineDesign(knots, seq(min(t),max(t),length=dim), degree+1))
+    if (sv$d[dim]/sv$d[1] < .Machine$double.eps^.66) {
+      warning("Reparametrization unstable. Original model matrix returned")
+    } else {
+      XP <- sv$v%*%(t(sv$u)/sv$d)
+      X <- X %*% XP
+      S <- t(XP) %*% S %*% XP
+      S <- S/eigen(S,symmetric=TRUE,only.values=TRUE)$values[1]
+    }
+  } else {XP <- NULL}
   
-  return(list(X = X, knots = knots, S = S, D = D1, S.scale = maS))
+  return(list(X = X, knots = knots, S = S, D = D1, S.scale = maS, XP = XP))
 }
 
 # See Reiss et al. (2014) 
@@ -210,9 +331,16 @@ WoodTensor <- function(X1, X2, coef.vector) {
 }
 
 WoodTensor.predict <- function(t1, t2, fit) {
+  
+  if (is.null(fit$splinepar[["XP1"]])) {
+    X1 <- splines::splineDesign(fit$knots[[1]], t1, ord = fit$splinepar[["degree"]]+1)
+    X2 <- splines::splineDesign(fit$knots[[2]], t2, ord = fit$splinepar[["degree"]]+1)
+  } else {
+    X1 <- splines::splineDesign(fit$knots[[1]], t1, ord = fit$splinepar[["degree"]]+1) %*% fit$splinepar[["XP1"]]
+    X2 <- splines::splineDesign(fit$knots[[2]], t2, ord = fit$splinepar[["degree"]]+1) %*% fit$splinepar[["XP2"]]
+  }
 
-  X1 <- splines::splineDesign(fit$knots[[1]], t1, ord = fit$splinepar[["degree"]]+1)
-  X2 <- splines::splineDesign(fit$knots[[2]], t2, ord = fit$splinepar[["degree"]]+1)
+
 
   X <- row.kronecker(X1,X2)
 
@@ -221,8 +349,6 @@ WoodTensor.predict <- function(t1, t2, fit) {
   return(exp(spline))
   
 }
-
-
 
 tensor <- function(t1, t2, coef.vector, df, degree, knots) {
   
@@ -337,11 +463,11 @@ loglikCpp <- function(coef.vector, degree, df, datalist) {
                 logtheta = t(logtheta2),
                 delta = t(datalist$delta.prod),
                 I1 = datalist$I1, I2 = datalist$I2, I3 = datalist$I5)
-  L2 <- 0
-  # L2 <- logLikC(riskset = datalist$riskset,
-  #               logtheta = logtheta2,
-  #               delta = datalist$delta.prod,
-  #               I1 = t(datalist$I2), I2 = t(datalist$I1), I3 = datalist$I6)
+  # L2 <- 0
+  L2 <- logLikC(riskset = datalist$riskset,
+                logtheta = logtheta2,
+                delta = datalist$delta.prod,
+                I1 = t(datalist$I2), I2 = t(datalist$I1), I3 = datalist$I6)
   
   return(L1+L2)
 }
@@ -364,19 +490,21 @@ loglikCpp <- function(coef.vector, degree, df, datalist) {
 #   return(-L1 - L2)
 # }
 
-loglikPenal <- function(coef.vector, degree, df, datalist, lambda = c(0,0), S = NULL) {
+loglikPenal <- function(coef.vector, degree, df, datalist, lambda = c(0,0), S = NULL, L1 = TRUE, L2 = TRUE) {
   
   logtheta2 <- tensor(datalist$X[,1], datalist$X[,2], degree = degree, coef.vector = coef.vector, df = df, knots = datalist$knots)
+  
+  if(!isTRUE(L1) && !isTRUE(L2)) stop("At least one likelihood contribution needs to be calculated")
   
   L1 <- logLikC(riskset = t(datalist$riskset), # LogLikC2 = asym, LogLikC = full
                 logtheta = t(logtheta2),
                 delta = t(datalist$delta.prod),
                 I1 = datalist$I1, I2 = datalist$I2, I3 = datalist$I5)
   L2 <- 0
-  # L2 <- logLikC(riskset = datalist$riskset,
-  #               logtheta = logtheta2,
-  #               delta = datalist$delta.prod,
-  #               I1 = t(datalist$I2), I2 = t(datalist$I1), I3 = datalist$I6)
+  L2 <- logLikC(riskset = datalist$riskset,
+                logtheta = logtheta2,
+                delta = datalist$delta.prod,
+                I1 = t(datalist$I2), I2 = t(datalist$I1), I3 = datalist$I6)
   
   
   if ( is.null(S)) {Penalty <- 0} else {
@@ -455,7 +583,7 @@ derivatives2 <- function(coef.vector, X1, X2, datalist, Sl = NULL, gradient = FA
   
   if (isTRUE(gradient)) {
     
-    gradient <- gradientC(riskset = datalist$riskset,
+    gradient <- gradientC(riskset = t(datalist$riskset),
                           logtheta = logtheta2,
                           df = df,
                           delta = datalist$delta.prod,
@@ -475,8 +603,7 @@ derivatives2 <- function(coef.vector, X1, X2, datalist, Sl = NULL, gradient = FA
                         df = df,
                         delta = t(datalist$delta.prod),
                         I1 = datalist$I1,
-                        I2 = datalist$I2,
-                        I3 = datalist$I5) # hessianC returns matrix of second derivatives of -loglik
+                        I2 = datalist$I2) # hessianC returns matrix of second derivatives of -loglik
     
   } else {hessian <- NA}
   
@@ -637,22 +764,28 @@ Score2 <- function(coef.vector, X1, X2, datalist, Sl = NULL) {
 #   return(-(L1+L2))
 # }
 
-SimData <- function (K, unif.ub, alpha = 0.0023) {
+SimData <- function (K, unif.ub = NULL, alpha = c(2,3,1.25), weights = c(0.2,0.4,0.4)) {
   
-  u1 <- runif(K, 0, 1)
-  u2 <- runif(K, 0, 1)
-
-  a <- alpha^u1 + (alpha - alpha^u1)*u2
-
-  # Fan 2000
-  T1 <- -log(u1)
-  T2 <- -log(log(a/(a+(1-alpha)*u2),base = alpha))
+  # u1 <- runif(K, 0, 1)
+  # u2 <- runif(K, 0, 1)
+  # 
+  # a <- alpha^u1 + (alpha - alpha^u1)*u2
+  # 
+  # # Fan 2000
+  # T1 <- -log(u1)
+  # T2 <- -log(log(a/(a+(1-alpha)*u2),base = alpha))
   
-  # U <- rCopula(K, frankCopula(alpha))
-  # 
-  # T1 <- 5*U[,1]
-  # T2 <- 5*U[,2]
-  # 
+  mx <- copula::mixCopula(list(copula::claytonCopula(alpha[1], dim = 2),
+                               copula::frankCopula(alpha[2], dim = 2),
+                               copula::gumbelCopula(alpha[3], dim = 2)),
+                          w = weights)
+  
+  U <- copula::rCopula(K, mx)
+  
+  T1 <- -log(U[,1])
+  T2 <- -log(U[,2])
+  
+
   if (is.null(unif.ub)) {
     # Fan 2000
     X1 <- T1
@@ -929,32 +1062,16 @@ wrapper2 <- function(coef.vector, X1, X2, datalist, Sl = NULL, H = NULL, minusLo
   
   logtheta2 <- WoodTensor(X1 = X1, X2 = X2, coef.vector = coef.vector)
   
-  
-  # log f_lambda(y,beta)
-  # ll <- logLikC(riskset = datalist$riskset,
-  #               logtheta = logtheta2,
-  #               delta = datalist$delta.prod,
-  #               I1 = datalist$I1,
-  #               I2 = datalist$I2,
-  #               I3 = datalist$I5,
-  #               I4 = datalist$I6) + penaltyLik - logS.lambda + logdetH - constant
-  
-  # ll <- logLikC(riskset = datalist$riskset,
-  #               logtheta = logtheta2,
-  #               delta = datalist$delta.prod,
-  #               I1 = datalist$I1,
-  #               I2 = datalist$I2,
-  #               I3 = datalist$I5) + penaltyLik - logSl/2 + logdetH/2
-  
   L1 <- logLikC(riskset = t(datalist$riskset),
                 logtheta = t(logtheta2),
                 delta = t(datalist$delta.prod),
                 I1 = datalist$I1, I2 = datalist$I2, I3 = datalist$I5)
-  L2 <- 0
-  # L2 <- logLikC(riskset = datalist$riskset,
-  #               logtheta = logtheta2,
-  #               delta = datalist$delta.prod,
-  #               I1 = t(datalist$I2), I2 = t(datalist$I1), I3 = datalist$I6)
+  
+  L2 <- logLikC(riskset = datalist$riskset,
+                logtheta = logtheta2,
+                delta = datalist$delta.prod,
+                I1 = t(datalist$I2), I2 = t(datalist$I1), I3 = datalist$I6)
+  # L2 <- 0
   
   ll <- L1 + L2 + penaltyLik/2
   REML <- ll - logSl/2 + logdetH/2
@@ -1152,7 +1269,9 @@ EstimatePenal <- function(datalist, degree, S, lambda.init = c(10,10), tol = 0.0
     history = score[1:iter]))
 }
 
-EstimatePenal2 <- function(datalist, dim, degree = 3, lambda.init = c(10,10), start = rep(1,dim^2), type = "bs", quantile = FALSE, scale = FALSE, repara = FALSE, tol = 0.001, eps = 1e-10, lambda.max = exp(15), step.control = FALSE) { 
+EstimatePenal2 <- function(datalist, dim, degree = 3, lambda.init = c(1,1), start = rep(1,dim^2),
+                           type = "ps",quantile = FALSE, scale = FALSE, repara = FALSE,
+                           tol = 0.001, eps = 1e-10, lambda.max = exp(15), maxiter = 10, step.control = FALSE) { 
   
   print("Extended Fellner-Schall method:")
   
@@ -1174,8 +1293,8 @@ EstimatePenal2 <- function(datalist, dim, degree = 3, lambda.init = c(10,10), st
                    # Sl = lambda.init*S
                    Sl = lambda.init[1]*S1 + lambda.init[2]*S2)
   k <- 1
-  score <- rep(0, 200)
-  for (iter in 1:200) {
+  score <- rep(0, maxiter)
+  for (iter in 1:maxiter) {
     
     l0 <- fit$REML
     
@@ -1276,7 +1395,7 @@ EstimatePenal2 <- function(datalist, dim, degree = 3, lambda.init = c(10,10), st
     # Break procedures ----
     
     # Break procedure if REML change and step size are too small
-    if (iter > 3 && max.step < 0.5 && max(abs(diff(score[(iter-3):iter]))) < 0.5) {print("REML not changing"); break}
+    if (iter > 3 && max.step < 1 && max(abs(diff(score[(iter-3):iter]))) < 1) {print("REML not changing"); break}
     # Or break is likelihood does not change
     if (l1 == l0) {print("Loglik not changing"); break}
     # Stop if loglik is not changing
@@ -1296,7 +1415,7 @@ EstimatePenal2 <- function(datalist, dim, degree = 3, lambda.init = c(10,10), st
     
   } # End of for loop
   
-  if (iter < 200) print("Converged") else print("Number of iterations is too small")
+  if (iter < maxiter) print("Converged") else print("Number of iterations is too small")
   
   return(list(
     beta = fit$beta,
@@ -1304,7 +1423,7 @@ EstimatePenal2 <- function(datalist, dim, degree = 3, lambda.init = c(10,10), st
     iterations = iter,
     ll = fit$ll,
     history = score[1:iter],
-    splinepar = list(dim = dim, degree = degree),
+    splinepar = list(dim = dim, degree = degree, XP1 = obj1$XP, XP2 = obj2$XP),
     knots = list(knots1 = obj1$knots, knots2 = obj2$knots)))
 }
 

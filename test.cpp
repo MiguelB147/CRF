@@ -143,72 +143,14 @@ double logLikC(const NumericMatrix riskset,
       } else {sum = sum + 0;}
     }
   }
+  
+  /* To calculate L2:
+   * I1 = t(I2)
+   * I2 = t(I1)
+   * I3 = I6 */
   return(-sum);
 }
 
-// [[Rcpp::export]]
-NumericVector gradientC(const NumericMatrix riskset,
-                        const NumericMatrix logtheta,
-                        const Rcpp::List deriv,
-                        const int df,
-                        const NumericMatrix delta,
-                        const NumericMatrix I1,
-                        const NumericMatrix I2,
-                        const NumericMatrix I3,
-                        const NumericMatrix I4) {
-  
-  int n = riskset.nrow();
-  int totalparam = df*df;
-  NumericVector result(totalparam);
-  
-  /* Transform list of derivative matrices into vector of matrices */
-  std::vector<NumericMatrix> deriv_vec(totalparam);
-  for(int k = 0; k < totalparam; ++k) {
-    NumericMatrix deriv_R = deriv[k];
-    /* arma::mat derivMat(deriv_R.begin(), deriv_R.rows(), deriv_R.cols(), false, true);
-     deriv_vec[k] = derivMat; */
-    deriv_vec[k] = deriv_R;       
-  }
-  
-  for (int m=0; m<totalparam; m++) {
-    
-    double sum1 = 0;
-    
-    /* Calculation of L1 */
-    for (int i=0; i<n; i++) {
-      for (int j=0; j<n; j++) {
-        if (riskset(j,i) > 0) {
-          sum1 = sum1 +
-            delta(j,i)*I1(i,j)*deriv_vec[m](j,i)*(
-                I3(i,j) -
-                I2(i,j)*(std::exp(logtheta(j,i)))/(riskset(j,i) + I2(i,j)*(std::exp(logtheta(j,i)) - 1))
-            );
-        } else {sum1 = sum1 + 0;}
-      } 
-    }
-    
-    result[m] = -sum1; /* Return derivative of -loglik */
-    
-  }
-  
-  return(result);
-  
-}
-
-// // [[Rcpp::export]]
-// double ScoreFunc(const NumericMatrix riskset, const NumericMatrix logthetaderiv, const NumericMatrix logtheta, const NumericMatrix delta, const NumericMatrix I1, const NumericMatrix I2) {
-//   int n = riskset.nrow();
-//   double sum = 0;
-//   for (int i=0; i<n; i++) {
-//     for (int j=0; j<n; j++) {
-//       if (riskset(i,j) > 0) {
-//         sum = sum +
-//           (delta(i,j)*I1(i,j)*I2(i,j)*std::exp(logtheta(i,j))*logthetaderiv(i,j))/(riskset(i,j) - I2(i,j)*(1-std::exp(logtheta(i,j))));
-//       } else {sum = sum + 0;}
-//     } 
-//   }
-//   return sum;
-// }
 
 // // [[Rcpp::export]]
 // double logLikC(const NumericMatrix riskset,
@@ -256,111 +198,34 @@ NumericVector gradientC(const NumericMatrix riskset,
 //   return(result);
 // }
 
-// [[Rcpp::export]]
-NumericMatrix hessianC(const NumericMatrix riskset,
-                       const NumericMatrix logtheta,
-                       const Rcpp::List deriv,
-                       const int df,
-                       const NumericMatrix delta,
-                       const NumericMatrix I1,
-                       const NumericMatrix I2,
-                       const NumericMatrix I3) {
-  
-  int n = riskset.nrow();
-  int totalparam = df*df;
-  
-  NumericMatrix result(totalparam);
-  
-  /* Transform list of derivative matrices into vector of matrices */
-  std::vector<NumericMatrix> deriv_vec(totalparam);
-  for(int k = 0; k < totalparam; ++k) {
-    NumericMatrix deriv_R = deriv[k];
-    /* arma::mat derivMat(deriv_R.begin(), deriv_R.rows(), deriv_R.cols(), false, true);
-     deriv_vec[k] = derivMat; */
-    deriv_vec[k] = deriv_R;
-  }
-  
-  /* Calculate upper triangle of hessian */
-  for (int m = 0; m < totalparam; m++) {
-    for (int l = m; l < totalparam; l++) {
-      
-      double sum1 = 0;
-      
-      for (int i=0; i<n; i++) {
-        for (int j=0; j<n; j++) {
-          if (riskset(j,i) > 0) {
-            sum1 = sum1 +
-              delta(j,i)*I1(i,j)*deriv_vec[m](j,i)*deriv_vec[l](j,i)*(riskset(j,i) - I2(i,j))*I2(i,j)*std::exp(logtheta(j,i))/pow(riskset(j,i) - I2(i,j) + I2(i,j)*(std::exp(logtheta(j,i))),2);
-          } else {sum1 = sum1 + 0;}
-        } 
-      }
-      
-      result(m,l) = sum1;
-      result(l,m) = result(m,l); /* Symmetric hessian: upper triangle = lower triangle */
-      
-    }
-  }
-  
-  /*
-  // Calculate diagonal
-  for (int k=0; k<totalparam; k++) {
-    
-    double sum2 = 0;
-    
-    for (int i=0; i<n; i++) {
-      for (int j=0; j<n; j++) {
-        if (riskset(j,i) > 0) {
-          // sum2 = sum2 +
-          //   delta(j,i)*I1(i,j)*(
-          //       -I3(i,j) + 
-          //       I2(i,j)*std::exp(logtheta(j,i))*
-          //       ((1 + pow(deriv_vec[k](j,i),2))*(riskset(j,i) - I2(i,j)) + I2(i,j)*std::exp(logtheta(j,i)))/pow(riskset(j,i) - I2(i,j) + I2(i,j)*(std::exp(logtheta(j,i))),2)
-          //       );
-          
-          sum2 = sum2 +
-            delta(j,i)*I1(i,j)*I2(i,j)*(1-I3(i,j))*delta(j,i)*(pow(deriv_vec[k](j,i),2))*riskset(j,i)*std::exp(logtheta(j,i))/(riskset(j,i) + I2(i,j)*(std::exp(logtheta(j,i)) - 1));
-        } else {sum2 = sum2 + 0;}
-      } 
-    }
-    
-    result(k,k) = sum2;
-  }
-  
-  */
-  
-  return(result); /* Return second derivative of -loglik */
-}
-
-
 // // [[Rcpp::export]]
 // NumericVector gradientC(const NumericMatrix riskset,
-//                  const NumericMatrix logtheta,
-//                  const Rcpp::List deriv,
-//                  const int df,
-//                  const NumericMatrix delta,
-//                  const NumericMatrix I1,
-//                  const NumericMatrix I2,
-//                  const NumericMatrix I3,
-//                  const NumericMatrix I4) {
-//   
+//                         const NumericMatrix logtheta,
+//                         const Rcpp::List deriv,
+//                         const int df,
+//                         const NumericMatrix delta,
+//                         const NumericMatrix I1,
+//                         const NumericMatrix I2,
+//                         const NumericMatrix I3,
+//                         const NumericMatrix I4) {
+// 
 //   int n = riskset.nrow();
 //   int totalparam = df*df;
 //   NumericVector result(totalparam);
-//   
+// 
 //   /* Transform list of derivative matrices into vector of matrices */
 //   std::vector<NumericMatrix> deriv_vec(totalparam);
 //   for(int k = 0; k < totalparam; ++k) {
 //     NumericMatrix deriv_R = deriv[k];
 //     /* arma::mat derivMat(deriv_R.begin(), deriv_R.rows(), deriv_R.cols(), false, true);
 //      deriv_vec[k] = derivMat; */
-//     deriv_vec[k] = deriv_R;       
+//     deriv_vec[k] = deriv_R;
 //   }
-//   
+// 
 //   for (int m=0; m<totalparam; m++) {
-//     
+// 
 //     double sum1 = 0;
-//     double sum2 = 0;
-//     
+// 
 //     /* Calculation of L1 */
 //     for (int i=0; i<n; i++) {
 //       for (int j=0; j<n; j++) {
@@ -371,123 +236,213 @@ NumericMatrix hessianC(const NumericMatrix riskset,
 //                 I2(i,j)*(std::exp(logtheta(j,i)))/(riskset(j,i) + I2(i,j)*(std::exp(logtheta(j,i)) - 1))
 //             );
 //         } else {sum1 = sum1 + 0;}
-//       } 
+//       }
 //     }
-//     
-//     /* Calculation of L2 */
-//     for (int i=0; i<n; i++) {
-//       for (int j=0; j<n; j++) {
-//         if (riskset(i,j) > 0) {
-//           sum2 = sum2 +
-//             delta(i,j)*I2(j,i)*deriv_vec[m](i,j)*(
-//                 I4(i,j) -
-//                 I1(j,i)*(std::exp(logtheta(i,j)))/(riskset(i,j) + I1(j,i)*(std::exp(logtheta(i,j)) - 1))
-//             );
-//         } else {sum2 = sum2 + 0;}
-//       } 
-//     }
-//     
-//     result[m] = -sum1-sum2;
-//     
+// 
+//     result[m] = -sum1; /* Return derivative of -loglik */
+// 
 //   }
-//   
-// return(result);
-//   
+// 
+//   return(result);
+// 
 // }
-
+// 
 // // [[Rcpp::export]]
 // NumericMatrix hessianC(const NumericMatrix riskset,
-//                 const NumericMatrix logtheta,
-//                 const Rcpp::List deriv,
-//                 const int df,
-//                 const NumericMatrix delta,
-//                 const NumericMatrix I1,
-//                 const NumericMatrix I2) {
-//   
+//                        const NumericMatrix logtheta,
+//                        const Rcpp::List deriv,
+//                        const int df,
+//                        const NumericMatrix delta,
+//                        const NumericMatrix I1,
+//                        const NumericMatrix I2) {
+// 
 //   int n = riskset.nrow();
 //   int totalparam = df*df;
-//   
+// 
 //   NumericMatrix result(totalparam);
-//   
+// 
 //   /* Transform list of derivative matrices into vector of matrices */
 //   std::vector<NumericMatrix> deriv_vec(totalparam);
 //   for(int k = 0; k < totalparam; ++k) {
 //     NumericMatrix deriv_R = deriv[k];
 //     /* arma::mat derivMat(deriv_R.begin(), deriv_R.rows(), deriv_R.cols(), false, true);
-//     deriv_vec[k] = derivMat; */
+//      deriv_vec[k] = derivMat; */
 //     deriv_vec[k] = deriv_R;
 //   }
-//   
+// 
+//   /* Calculate upper triangle of hessian */
 //   for (int m = 0; m < totalparam; m++) {
 //     for (int l = m; l < totalparam; l++) {
-//       
+// 
 //       double sum1 = 0;
-//       double sum2 = 0;
-//       
+// 
 //       for (int i=0; i<n; i++) {
 //         for (int j=0; j<n; j++) {
 //           if (riskset(j,i) > 0) {
-//             sum1 = sum1 -
-//               delta(j,i)*I1(i,j)*deriv_vec[m](j,i)*deriv_vec[l](j,i)*(riskset(j,i) - I2(i,j))*I2(i,j)*(std::exp(logtheta(j,i)))/pow(riskset(j,i) - I2(i,j) + I2(i,j)*(std::exp(logtheta(j,i))),2);
+//             sum1 = sum1 +
+//               delta(j,i)*I1(i,j)*deriv_vec[m](j,i)*deriv_vec[l](j,i)*(riskset(j,i) - I2(i,j))*I2(i,j)*std::exp(logtheta(j,i))/pow(riskset(j,i) - I2(i,j) + I2(i,j)*(std::exp(logtheta(j,i))),2);
 //           } else {sum1 = sum1 + 0;}
-//         } 
+//         }
 //       }
-//       
-//       for (int i=0; i<n; i++) {
-//         for (int j=0; j<n; j++) {
-//           if (riskset(i,j) > 0) {
-//             sum2 = sum2 -
-//               delta(i,j)*I2(j,i)*deriv_vec[m](i,j)*deriv_vec[l](i,j)*(riskset(i,j) - I1(j,i))*I1(j,i)*(std::exp(logtheta(i,j)))/pow(riskset(i,j) - I1(j,i) + I1(j,i)*(std::exp(logtheta(i,j))),2);
-//           } else {sum2 = sum2 + 0;}
-//         } 
-//       }
-//       
-//       result(m,l) = -sum1-sum2;
-//       result(l,m) = result(m,l);
-//       
+// 
+//       result(m,l) = sum1;
+//       result(l,m) = result(m,l); /* Symmetric hessian: upper triangle = lower triangle */
+// 
 //     }
 //   }
-//   
-// return(result);
 // 
+//     return(result); /* Return second derivative of -loglik */
 // }
+  
 
-/*
 // [[Rcpp::export]]
-NumericMatrix tensorC(const NumericMatrix spline1,
-                const NumericMatrix spline2,
-                const NumericMatrix beta) {
-  int 
+NumericVector gradientC(const NumericMatrix riskset,
+                 const NumericMatrix logtheta,
+                 const Rcpp::List deriv,
+                 const int df,
+                 const NumericMatrix delta,
+                 const NumericMatrix I1,
+                 const NumericMatrix I2,
+                 const NumericMatrix I3,
+                 const NumericMatrix I4) {
+
+  int n = riskset.nrow();
+  int totalparam = df*df;
+  NumericVector result(totalparam);
+
+  /* Transform list of derivative matrices into vector of matrices */
+  std::vector<NumericMatrix> deriv_vec(totalparam);
+  for(int k = 0; k < totalparam; ++k) {
+    NumericMatrix deriv_R = deriv[k];
+    /* arma::mat derivMat(deriv_R.begin(), deriv_R.rows(), deriv_R.cols(), false, true);
+     deriv_vec[k] = derivMat; */
+    deriv_vec[k] = deriv_R;
+  }
+
+  for (int m=0; m<totalparam; m++) {
+
+    double sum1 = 0;
+    double sum2 = 0;
+
+    /* Calculation of L1 */
+    for (int i=0; i<n; i++) {
+      for (int j=0; j<n; j++) {
+        if (riskset(j,i) > 0) {
+          sum1 = sum1 +
+            delta(j,i)*I1(i,j)*deriv_vec[m](j,i)*(
+                I3(i,j) -
+                I2(i,j)*(std::exp(logtheta(j,i)))/(riskset(j,i) + I2(i,j)*(std::exp(logtheta(j,i)) - 1))
+            );
+        } else {sum1 = sum1 + 0;}
+      }
+    }
+
+    /* Calculation of L2 */
+    for (int i=0; i<n; i++) {
+      for (int j=0; j<n; j++) {
+        if (riskset(i,j) > 0) {
+          sum2 = sum2 +
+            delta(i,j)*I2(j,i)*deriv_vec[m](i,j)*(
+                I4(i,j) -
+                I1(j,i)*(std::exp(logtheta(i,j)))/(riskset(i,j) + I1(j,i)*(std::exp(logtheta(i,j)) - 1))
+            );
+        } else {sum2 = sum2 + 0;}
+      }
+    }
+
+    result[m] = -sum1-sum2;
+
+  }
+
+return(result);
+
 }
 
-*/
+// [[Rcpp::export]]
+NumericMatrix hessianC(const NumericMatrix riskset,
+                const NumericMatrix logtheta,
+                const Rcpp::List deriv,
+                const int df,
+                const NumericMatrix delta,
+                const NumericMatrix I1,
+                const NumericMatrix I2) {
+
+  int n = riskset.nrow();
+  int totalparam = df*df;
+
+  NumericMatrix result(totalparam);
+
+  /* Transform list of derivative matrices into vector of matrices */
+  std::vector<NumericMatrix> deriv_vec(totalparam);
+  for(int k = 0; k < totalparam; ++k) {
+    NumericMatrix deriv_R = deriv[k];
+    /* arma::mat derivMat(deriv_R.begin(), deriv_R.rows(), deriv_R.cols(), false, true);
+    deriv_vec[k] = derivMat; */
+    deriv_vec[k] = deriv_R;
+  }
+
+  for (int m = 0; m < totalparam; m++) {
+    for (int l = m; l < totalparam; l++) {
+
+      double sum1 = 0;
+      double sum2 = 0;
+
+      // L1
+      for (int i=0; i<n; i++) {
+        for (int j=0; j<n; j++) {
+          if (riskset(j,i) > 0) {
+            sum1 = sum1 -
+              delta(j,i)*I1(i,j)*deriv_vec[m](j,i)*deriv_vec[l](j,i)*(riskset(j,i) - I2(i,j))*I2(i,j)*(std::exp(logtheta(j,i)))/pow(riskset(j,i) - I2(i,j) + I2(i,j)*(std::exp(logtheta(j,i))),2);
+          } else {sum1 = sum1 + 0;}
+        }
+      }
+
+      // L2
+      for (int i=0; i<n; i++) {
+        for (int j=0; j<n; j++) {
+          if (riskset(i,j) > 0) {
+            sum2 = sum2 -
+              delta(i,j)*I2(j,i)*deriv_vec[m](i,j)*deriv_vec[l](i,j)*(riskset(i,j) - I1(j,i))*I1(j,i)*(std::exp(logtheta(i,j)))/pow(riskset(i,j) - I1(j,i) + I1(j,i)*(std::exp(logtheta(i,j))),2);
+          } else {sum2 = sum2 + 0;}
+        }
+      }
+
+      result(m,l) = -sum1-sum2;
+      result(l,m) = result(m,l);
+
+    }
+  }
+
+return(result);
+
+}
 
 // // [[Rcpp::export]]
 // NumericVector MatToVec(const NumericMatrix matrix) {
-//   
+// 
 //   int row = matrix.nrow();
 //   int column = matrix.ncol();
 //   NumericVector vector(row*column);
-//   
+// 
 //   int k = 0;
-//   
+// 
 //   for (int j = 0; j < column; j++) {
 //     for (int i = 0; i < row; i++) {
 //       vector[k] = matrix(i,j);
 //       k = k + 1;
 //     }
 //   }
-//   
+// 
 //   return(vector);
-//   
+// 
 // }
 // 
 // // [[Rcpp::export]]
 // NumericMatrix VecToMat(const NumericVector vector) {
-//   
+// 
 //   int df = pow(vector.size(), 1/2);
 //   NumericMatrix matrix(df);
-//   
+// 
 //   int k = 0;
 //   for (int j = 0; j < df; j++) {
 //     for (int i = 0; i < df; i++) {
@@ -495,33 +450,10 @@ NumericMatrix tensorC(const NumericMatrix spline1,
 //       k = k + 1;
 //     }
 //   }
-//   
-//   return(matrix);
-//   
-// }
-
-// // [[Rcpp::export]]
-// arma::vec SimulateBeta(const int nsim,
-//                            arma::mat S) {
-//   
-//   int df = pow(S.n_rows,2);
-//   arma::vec lik(nsim);
-//   arma::mat Sinv(df,df);
-//   arma::vec beta(df);
-//   arma::vec mean = arma::zeros(df);
-//   
-//   Sinv = arma::pinv(S);
-//   
-//   for (int i=0; i<nsim; i++) {
-//     
-//     beta = arma::mvnrnd(mean, Sinv);
 // 
-//     
-//   }
-//   return(lik);
+//   return(matrix);
+// 
 // }
-
-
 
 
 

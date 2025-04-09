@@ -155,54 +155,29 @@ df = 7
 K <- 1000
 unif.ub <- NULL # 5 = 20% censoring, 2.3 = 40% censoring
 
-# 
-# spline1 <- WoodSpline(datalist$X[,1], dim = 10, scale = FALSE, type = "ps")
-# spline1$S
-# spline2 <- WoodSpline(datalist$X[,2], dim = 10, scale = FALSE, type = "ps")
-# spline2$S
-# 
-# D1 <- spline1$D %x% diag(rep(1, 10))
-# S1 <- crossprod(D1)
-# 
-# D2 <- diag(rep(1, 10)) %x% spline2$D
-# S2 <- crossprod(D2)
-
-
 set.seed(123)
-datalist <- SimData(K = K, df = df, degree = degree, unif.ub = unif.ub, alpha = 20)
+datalist <- SimData(K = K)
 
-# S <- list(Srow(df), Scol(df))
-# lambda <- c(50,50)
-# Sl<- lambda[1]*S[[1]] + lambda[2]*S[[2]]
-# S <- Srow(df)
-# 
-# test <- eigen(Sl)
-# prod(test$values[test$values > 0])
-# log(prod(test$values[test$values > 0]))
+fit <- EstimatePenal2(datalist = datalist, dim = 7, lambda.init = c(100,100), repara = TRUE)
 
-# S <- list(Srow(df, diff = degree-1), Scol(df, diff = degree-1))
-# fit <- EstimatePenal(datalist = datalist, degree = degree, S = S, lambda.init = c(10,10), step.control = F)
-
-beta.start <- fit7bsscale$beta
-fit7bsquant <- EstimatePenal2(datalist = datalist, dim = 7, type = "ps", lambda.init = c(10,10), scale = FALSE, repara = TRUE, quantile = FALSE)
-
-
-test <- efsud.fit(fit$beta, degree = degree, datalist = datalist, Sl = 2*S[[1]] + 0*S[[2]])
-
-plot.grid <- expand.grid(seq(0.25,1.5,by=0.25), seq = seq(0.1,2.2,by = 0.05))
+plot.grid <- expand.grid(seq(0.25,3,by=0.25), seq = seq(0.1,3,by = 0.05))
 names(plot.grid) <- c("time1","time2")
-
-plot.grid$true <- theta.frank(plot.grid$time1,plot.grid$time2)
-plot.grid$psscale <- WoodTensor.predict(plot.grid$time1, plot.grid$time2, fit7psscale)
-plot.grid$bsscale <- WoodTensor.predict(plot.grid$time1, plot.grid$time2, fit7bsscale)
-plot.grid$ps <- WoodTensor.predict(plot.grid$time1, plot.grid$time2, fit7ps)
-plot.grid$bs <- WoodTensor.predict(plot.grid$time1, plot.grid$time2, fit7bs)
-plot.grid$bsquant <- WoodTensor.predict(plot.grid$time1, plot.grid$time2, fit7bsquant)
-# plot.grid$CRFbsscalequant <- WoodTensor.predict(plot.grid$time1, plot.grid$time2, fit7bsscalequant)
-
-
-
+# plot.grid$true <- theta.mix(plot.grid$time1, plot.grid$time2)
+plot.grid$true <- theta.frank(plot.grid$time1, plot.grid$time2)
 CRF <- WoodTensor.predict(plot.grid$time1, plot.grid$time2, fit)
+
+par(mfrow = c(2,3))
+for (i in unique(plot.grid$time1)) {
+  plottext <- paste0("t[1] == ", i)
+  plot(x = plot.grid$time2[plot.grid$time1 == i],
+       y = plot.grid$true[plot.grid$time1 == i],
+       type = 'l', lwd = 2, col = "grey",
+       ylim = c(0,5),
+       ylab = "CRF", xlab = expression(t[2]), main = parse(text = plottext))
+  lines(x = plot.grid$time2[plot.grid$time1 == i], y = CRF[plot.grid$time1 == i], col = "red", lwd = 2)
+  }
+par(mfrow = c(1,1))
+
 # CRF <- mapply(function(x,y) WoodTensor.predict(x, y, fit),
 #               plot.grid$time1,
 #               plot.grid$time2)
@@ -219,23 +194,6 @@ CRF <- WoodTensor.predict(plot.grid$time1, plot.grid$time2, fit)
 
 
 
-par(mfrow = c(2,3))
-for (i in unique(plot.grid$time1)) {
-  
-  plottext <- paste0("t[1] == ", i)
-  plot(x = plot.grid$time2[plot.grid$time1 == i],
-       y = plot.grid$true[plot.grid$time1 == i],
-       type = 'l', lwd = 2, col = "grey",
-       ylab = "CRF", xlab = expression(t[2]), main = parse(text = plottext),
-       ylim=c(0,7))
-  lines(x = plot.grid$time2[plot.grid$time1 == i], y = plot.grid$psscale[plot.grid$time1 == i], col = 1, lwd = 2)
-  lines(x = plot.grid$time2[plot.grid$time1 == i], y = plot.grid$bsscale[plot.grid$time1 == i], col = 2, lwd = 2)
-  lines(x = plot.grid$time2[plot.grid$time1 == i], y = plot.grid$ps[plot.grid$time1 == i], col = 3, lwd = 2)
-  lines(x = plot.grid$time2[plot.grid$time1 == i], y = plot.grid$bs[plot.grid$time1 == i], col = 4, lwd = 2)
-  # lines(x = plot.grid$time2[plot.grid$time1 == i], y = plot.grid$bsscalequant[plot.grid$time1 == i], col = 5, lwd = 2)
-  lines(x = plot.grid$time2[plot.grid$time1 == i], y = plot.grid$bsquant[plot.grid$time1 == i], col = 6, lwd = 2)
-}
-par(mfrow = c(1,1))
 
 
 

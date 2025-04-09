@@ -12,10 +12,10 @@ WoodSpline <- function(t, dim, degree = 3, type = NULL, quantile = FALSE, scale 
   knots <- seq(xl-dx*degree,xu+dx*degree,length=nk+2*degree) # Vector of knots
   if (quantile) {
     k.int <- quantile(t, probs = seq(0, 1, length = nk))[-c(1, nk)]
-    knots[(degree+2):(length(k)-(degree+1))] <- k.int
+    knots[(degree+2):(length(knots)-(degree+1))] <- k.int
   }
   
-  X <- splines::splineDesign(k, t, degree+1)
+  X <- splines::splineDesign(knots, t, degree+1)
   
   # Create penalty matrix S = t(D1) %*% D1 if necessary ----
   if (is.null(type)) {S <- D1 <- NULL}
@@ -96,6 +96,26 @@ WoodSpline <- function(t, dim, degree = 3, type = NULL, quantile = FALSE, scale 
     ## Discrete penalty ----
     D1 <- diff(diag(dim), differences = m2)
     S <- crossprod(D1)
+  } else if (type == "gps") {
+    
+    M1 <- M2 <- c()
+    M <- diff(diag(dim))
+    
+    #W1
+    for (i in 1:(dim-1)) {
+      M1[i] <- knots[degree+1+i] - knots[i+1]
+    }
+    # W2
+    for (i in 1:(dim-2)) {
+      M2[i] <- knots[degree+1+i] - knots[i+2]
+    }
+    
+    W1 <- diag(M1)/(degree+1-1)
+    W2 <- diag(M2)/(degree+1-2)
+    
+    D1 <- solve(W2) %*% diff(diag(dim-1)) %*% solve(W1) %*% diff(diag(dim))
+    S <- crossprod(D1)
+    
   }
   
   # if(repara) {

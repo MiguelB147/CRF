@@ -1,5 +1,5 @@
 
-WoodSpline <- function(t, dim, degree = 3, type = NULL, quantile = FALSE, scale = TRUE, m2 = degree-1) {
+WoodSpline <- function(t, dim, degree = 3, type = NULL, quantile = FALSE, scale = FALSE, repara = FALSE, m2 = degree-1) {
   
   nk <- dim - degree + 1 # Number of "interior" knots (internal + boundary)
   
@@ -8,24 +8,24 @@ WoodSpline <- function(t, dim, degree = 3, type = NULL, quantile = FALSE, scale 
   xr <- xu - xl
   xl <- xl-xr*0.001; xu <- xu+xr*0.001
   dx <- (xu-xl)/(nk-1)
-  k <- seq(xl-dx*degree,xu+dx*degree,length=nk+2*degree) # Vector of knots
+  knots <- seq(xl-dx*degree,xu+dx*degree,length=nk+2*degree) # Vector of knots
   if(quantile) {
     k.int <- quantile(t, probs = seq(0, 1, length = nk))[-c(1, nk)]
-    k[(degree+2):(length(k)-(degree+1))] <- k.int
+    knots[(degree+2):(length(knots)-(degree+1))] <- k.int
   }
 
   
-  X <- splines::splineDesign(k, t, degree+1)
+  X <- splines::splineDesign(knots, t, degree+1)
   
   if (is.null(type)) {S <- D1 <- NULL} else if (type == "bs") {
     
     pord <- degree - m2
-    k0 <- k[(degree+1):(degree+nk)]
+    k0 <- knots[(degree+1):(degree+nk)]
     h <- diff(k0)
     h1 <- rep(h/pord, each = pord)
     k1 <- cumsum(c(k0[1],h1))
     
-    D <- splines::splineDesign(k,k1,derivs = m2)
+    D <- splines::splineDesign(knots,k1,derivs = m2)
   
     P <- solve(matrix(rep(seq(-1,1,length=pord+1),pord+1)^rep(0:pord,each=pord+1),pord+1,pord+1))
     i1 <- rep(1:(pord+1),pord+1)+rep(1:(pord+1),each=pord+1) ## i + j
@@ -84,6 +84,24 @@ WoodSpline <- function(t, dim, degree = 3, type = NULL, quantile = FALSE, scale 
   } else if (type == "ps") {
     D1 <- diff(diag(dim), differences = m2)
     S <- crossprod(D1)
+  } else if (type == "gps") {
+    M1 <- M2 <- c()
+    M <- diff(diag(dim))
+    
+    #W1
+    for (i in 1:(dim-1)) {
+      M1[i] <- knots[degree+1+i] - knots[i+1]
+    }
+    # W2
+    for (i in 1:(dim-2)) {
+      M2[i] <- knots[degree+1+i] - knots[i+2]
+    }
+    
+    W1 <- diag(M1)/(degree+1-1)
+    W2 <- diag(M2)/(degree+1-2)
+    
+    D1 <- solve(W2) %*% diff(diag(dim-1)) %*% solve(W1) %*% diff(diag(dim))
+    S <- crossprod(D1)
   }
   
   # if(repara) {
@@ -105,9 +123,15 @@ WoodSpline <- function(t, dim, degree = 3, type = NULL, quantile = FALSE, scale 
     S <- S/maS
     D1 <- D1/maS
   } else maS <- NULL
-
   
-  return(list(X = X, knots = k, S = S, D = D1, S.scale = maS))
+  if (repara) {
+    # G <- t(splines::splineDesign(knots, seq(min(t),max(t),length=dim), degree+1))
+    # Gm <- solve(G)
+    # X <- X %*% Gm
+    # S <-  t(Gm) %*% S %*% Gm
+    }
+  
+  return(list(X = X, knots = knots, S = S, D = D1, S.scale = maS))
 }
 
 
@@ -169,12 +193,12 @@ hessian <- function(X, Sl = NULL) {
 }
 
 
-EstimatePenal <- function(dim = 10, lambda.init = 10, type = "bs", quantile = FALSE, scale = TRUE, tol = 0.001, lambda.max = exp(15), step.control = TRUE) { 
+EstimatePenal <- function(dim = 10, lambda.init = 10, type = "bs", quantile = FALSE, scale = FALSE, repara = TRUE, tol = 0.001, lambda.max = exp(15), step.control = TRUE) { 
   
   tiny <- .Machine$double.eps^0.5
   
 
-  model <- WoodSpline(t = mtcars$hp, dim = dim, degree = 3, type = type, scale = scale, quantile = quantile)
+  model <- WoodSpline(t = mtcars$hp, dim = dim, degree = 3, type = type, scale = scale, quantile = quantile, repara = repara)
   S <- model$S
   X <- model$X
 
