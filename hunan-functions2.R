@@ -691,11 +691,14 @@ wrapper2 <- function(coef.vector, X1, X2, datalist, Sl = NULL, H = NULL, minusLo
     
     penaltyLik <- t(coef.vector) %*% Sl %*% coef.vector
     logSl <- sum(log(Sl.eigenv[Sl.eigenv > 0]))
+    if (is.infinite(logSl)) stop("The log of the pseudo-determinant of Sl is ill-conditioned")
   }
   
-  # TODO implement sanity check that !is.null(S.lambda) & !is.null(H) & minusLogLik=FALSE implies laplace likelihood
   if (!is.null(H)) {
-    logdetH <- log(det(H + Sl))
+    H.ev <- eigen(H+Sl, only.values = TRUE)$values
+    H.ev.sign <- prod(sign(H.ev))
+    logdetH <- H.ev.sign*sum(log(abs(H.ev)))
+    if (is.infinite(logdetH)) stop("The log of the determinant of H is ill-conditioned")
   } else logdetH <- 0
   
   

@@ -198,22 +198,20 @@ H2[1:3,1:3]
 
 
 
-library(Rcpp)
+library(CRFpackage)
 
-source('hunan-functions2.R')
-sourceCpp('test2.cpp')
 
 set.seed(123)
-datalist <- SimData(K = 1000, w = c(0.2, 0.5, 0.3), alpha = c(3, 3, 2), margin = "unif")
+datalist <- SimData(K = 1000, w = c(0.2, 0.4, 0.4), alpha = c(2, 3, 1.25), margin = "exp")
 
 plot.grid <- expand.grid(seq(0.25,5,by=0.25), seq = seq(0.1,5,by = 0.05))
 names(plot.grid) <- c("time1","time2")
-plot.grid$true <- theta.mix(plot.grid$time1, plot.grid$time2, w = c(0.2, 0.5, 0.3), alpha = c(3, 3, 2))
+plot.grid$true <- theta.mix(plot.grid$time1, plot.grid$time2,  w = c(0.2, 0.4, 0.4), alpha = c(2, 3, 1.25), margin = "exp")
 
 # plot.grid$true <- theta.frank(plot.grid$time1, plot.grid$time2)
 # fit.poly <- multiroot(f = poly.fit, start = rep(0,10), datalist = datalist); poly <- exp(polynomial(plot.grid$time1, plot.grid$time2, fit.poly$root))
 
-fit <- EstimatePenal2(datalist = datalist, dim = 10, lambda.init = c(10,10), quantile = FALSE, type = "ps", repara = FALSE)
+fit2 <- EstimatePenal2(datalist = datalist, dim = 12, lambda.init = c(5,5), quantile = TRUE, type = "gps", repara = FALSE)
 fit.poly <- EstimatePoly(datalist = datalist)
 
 poly <- exp(polynomial(plot.grid$time1, plot.grid$time2, fit.poly))
@@ -230,12 +228,12 @@ for (i in unique(plot.grid$time1)) {
        ylim = c(0,7),
        ylab = "CRF", xlab = expression(t[2]), main = parse(text = plottext))
   
-  # lines(x = plot.grid$time2[plot.grid$time1 == i], y = CRF[plot.grid$time1 == i], col = "red", lwd = 2)
-  # for (j in 1:length(fit$knots[["knots2"]])) {
-  #   abline(v = fit$knots[["knots2"]][j], col = "lightgrey")
-  # }
+  lines(x = plot.grid$time2[plot.grid$time1 == i], y = CRF[plot.grid$time1 == i], col = "red", lwd = 2)
+  for (j in 1:length(fit$knots[["knots2"]])) {
+    abline(v = fit$knots[["knots2"]][j], col = "lightgrey")
+  }
   
-  lines(x = plot.grid$time2[plot.grid$time1 == i], y = poly[plot.grid$time1 == i], col = "blue", lwd = 2)
+  # lines(x = plot.grid$time2[plot.grid$time1 == i], y = poly[plot.grid$time1 == i], col = "blue", lwd = 2)
 }
 par(mfrow = c(1,1))
 dev.off()
