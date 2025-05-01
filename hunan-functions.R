@@ -36,8 +36,12 @@ theta.frank <- function(x,y,alpha=0.0023) {
 
 theta.mix <- function(t1, t2, w = c(0.2,0.4,0.4), alpha = c(2,3,1.25)) {
   
-  S1 <- exp(-t1)
-  S2 <- exp(-t2)
+  # S1 <- exp(-t1)
+  # S2 <- exp(-t2)
+  
+  S1 <- 1-t1/5
+  S2 <- 1-t2/5
+  
   
   # Clayton
   kappa <- S1^(-alpha[1]) + S2^(-alpha[1])
@@ -127,7 +131,97 @@ theta.mix2 <- function(t1, t2, w = c(0.2,0.4,0.4), alpha = c(2,3,1.25)) {
 #   return(CRF)
 # }
 
+polynomial <- function(t1,t2,coef.vec) {
+  
+  logtheta <- coef.vec[1] + coef.vec[2]*t1 + coef.vec[3]*t2 +
+    coef.vec[4]*t1^2 + coef.vec[5]*t2^2 + coef.vec[6]*t1*t2 +
+    coef.vec[7]*(t1^2)*t2 + coef.vec[8]*t1*(t2^2) +
+    coef.vec[9]*t1^3 + coef.vec[10]*t2^3
+  
+  return(logtheta)
+  
+}
 
+poly.predict <- function(t1, t2, beta, degree = 3) {
+  
+  X1 <- poly(t1, degree = degree, simple = TRUE)
+  X2 <- poly(t2, degree = degree, simple = TRUE)
+  
+  X <- row.kronecker(X1,X2)
+  
+  logtheta <- X %*% beta
+  
+  return(exp(logtheta))
+}
+
+poly.fit <- function (beta, datalist) {
+  
+  # logtheta <- X1 %*% matrix(beta, ncol = df, byrow = FALSE) %*% t(X2)
+  logtheta2 <- outer(datalist$X[,1], datalist$X[,2], function (x,y) polynomial(x,y, coef.vec = beta))
+  
+  df <- 10
+  
+  M <- diag(df)
+  
+  # List of gradient matrices for every spline coefficient
+  deriv <- apply(M, 2, function(A) {outer(datalist$X[,1], datalist$X[,2], function (x,y) polynomial(x,y, coef.vec = A))},
+                 simplify = FALSE)
+  
+  
+  gradient <- gradientPoly(riskset = datalist$riskset,
+                        logtheta = logtheta2,
+                        df = 10,
+                        delta = datalist$delta.prod,
+                        deriv = deriv,
+                        I1 = datalist$I1,
+                        I2 = datalist$I2,
+                        I3 = datalist$I5,
+                        I4 = datalist$I6) # gradientC returns vector of derivatives of -loglik
+  
+  return(gradient)
+  
+  
+  # logtheta1 <- t(logtheta2)
+  # 
+  # N1 <- t(datalist$riskset)
+  # N2 <- datalist$riskset
+  # 
+  # delta2 <- datalist$delta.prod
+  # delta1 <- t(delta2)
+  # 
+  # I1 <- datalist$I1
+  # I2 <- datalist$I2
+  # I3 <- t(datalist$I2)
+  # I4 <- t(datalist$I1)
+  # I5 <- datalist$I5
+  # I6 <- datalist$I6
+  # 
+  # A1 <- (delta1*I1)[N1 > 0]
+  # A2 <- (delta2*I3)[N2 > 0]
+  # 
+  # B1 <- c(datalist$I5*logtheta1)[N1 > 0]
+  # B2 <- c(datalist$I6*logtheta2)[N2 > 0]
+  # 
+  # C1 <- c(N1 + I2*(exp(logtheta1)-1))[N1 > 0]
+  # C2 <- c(N2 + I4*(exp(logtheta2)-1))[N2 > 0]
+  # 
+  # 
+  # L1 <- sum(A1*(B1 - log(C1)))
+  # L2 <- sum(A2*(B2 - log(C2)))
+  # 
+  # L1 <- logLikC(riskset = t(datalist$riskset),
+  #               logtheta = t(logtheta2),
+  #               delta = t(datalist$delta.prod),
+  #               I1 = datalist$I1, I2 = datalist$I2, I3 = datalist$I5)
+  # 
+  # L2 <- logLikC(riskset = datalist$riskset,
+  #               logtheta = logtheta2,
+  #               delta = datalist$delta.prod,
+  #               I1 = t(datalist$I2), I2 = t(datalist$I1), I3 = datalist$I6)
+# 
+#   return(-L1-L2)
+  
+}
 
 WoodSpline <- function(t, dim, degree = 3, type = "ps", quantile = FALSE, scale = TRUE, repara = TRUE, m2 = degree-1) {
   
@@ -266,6 +360,7 @@ WoodSpline <- function(t, dim, degree = 3, type = "ps", quantile = FALSE, scale 
     D1 <- D1/sqrt(maS)
   } else maS <- NULL
   
+  # Reparametrization
   if (repara) {
     # G <- t(splines::splineDesign(knots, seq(min(t),max(t),length=dim), degree+1))
     # Gm <- solve(G)
@@ -404,17 +499,8 @@ tensor <- function(t1, t2, coef.vector, df, degree, knots) {
 #   return(spline12)
 # }
 
-# polynomial <- function(t1,t2,coef.vec) {
-#   
-#   logtheta <- coef.vec[1] + coef.vec[2]*t1 + coef.vec[3]*t2 +
-#     coef.vec[4]*t1^2 + coef.vec[5]*t2^2 + coef.vec[6]*t1*t2 + 
-#     coef.vec[7]*(t1^2)*t2 + coef.vec[8]*t1*(t2^2) +
-#     coef.vec[9]*t1^3 + coef.vec[10]*t2^3
-#   
-#   return(logtheta)
-#   
-# }
-# 
+
+
 # riskset <- function(x, y) {
 #   N <- sum(1*(X[,1] >= x & X[,2] >= y))
 #   return(N)
@@ -777,14 +863,18 @@ SimData <- function (K, unif.ub = NULL, alpha = c(2,3,1.25), weights = c(0.2,0.4
   # T2 <- -log(log(a/(a+(1-alpha)*u2),base = alpha))
   
   mx <- copula::mixCopula(list(copula::claytonCopula(alpha[1], dim = 2),
-                               copula::frankCopula(alpha[2], dim = 2),
-                               copula::gumbelCopula(alpha[3], dim = 2)),
+                      copula::frankCopula(alpha[2], dim = 2),
+                      copula::gumbelCopula(alpha[3], dim = 2)),
                           w = weights)
   
-  U <- copula::rCopula(K, mx)
+  U <- copula::rCopula(K, copula = mx)
   
-  T1 <- -log(U[,1])
-  T2 <- -log(U[,2])
+  
+  # T1 <- -log(U[,1])
+  # T2 <- -log(U[,2])
+  
+  T1 <- 5*(1-U[,1])
+  T2 <- 5*(1-U[,2])
   
 
   if (is.null(unif.ub)) {
@@ -1396,14 +1486,14 @@ EstimatePenal2 <- function(datalist, dim, degree = 3, lambda.init = c(1,1), star
     # Break procedures ----
     
     # Break procedure if REML change and step size are too small
-    if (iter > 3 && max.step < 1 && max(abs(diff(score[(iter-3):iter]))) < 1) {print("REML not changing"); break}
+    if (iter > 3 && max(abs(diff(score[(iter-3):iter]))) < 1) {print("REML not changing"); break} # && max.step < 1
     # Or break is likelihood does not change
     if (l1 == l0) {print("Loglik not changing"); break}
     # Stop if loglik is not changing
-    # if (iter==1) old.ll <- fit$ll else {
-    #   if (abs(old.ll-fit$ll)<eps*abs(fit$ll)) {print("Loglik not changing"); break}  # *100
-    #   old.ll <- fit$ll
-    # }
+    if (iter==1) old.ll <- fit$ll else {
+      if (abs(old.ll-fit$ll)<100*eps*abs(fit$ll)) {print("Loglik not changing"); break}  # *100
+      old.ll <- fit$ll
+    }
     
     # Print information while running...
     print(paste0("Iteration ", iter,

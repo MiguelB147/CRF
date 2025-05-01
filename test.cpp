@@ -358,6 +358,71 @@ return(result);
 
 }
 
+
+// [[Rcpp::export]]
+NumericVector gradientPoly(const NumericMatrix riskset,
+                        const NumericMatrix logtheta,
+                        const Rcpp::List deriv,
+                        const int df,
+                        const NumericMatrix delta,
+                        const NumericMatrix I1,
+                        const NumericMatrix I2,
+                        const NumericMatrix I3,
+                        const NumericMatrix I4) {
+  
+  int n = riskset.nrow();
+  int totalparam = df;
+  NumericVector result(totalparam);
+
+  /* Transform list of derivative matrices into vector of matrices */
+  std::vector<NumericMatrix> deriv_vec(totalparam);
+  for(int k = 0; k < totalparam; ++k) {
+    NumericMatrix deriv_R = deriv[k];
+    /* arma::mat derivMat(deriv_R.begin(), deriv_R.rows(), deriv_R.cols(), false, true);
+     deriv_vec[k] = derivMat; */
+    deriv_vec[k] = deriv_R;
+  }
+
+  for (int m=0; m<totalparam; m++) {
+   
+    double sum1 = 0;
+    double sum2 = 0;
+  
+    /* Calculation of L1 */
+    for (int i=0; i<n; i++) {
+      for (int j=0; j<n; j++) {
+        if (riskset(j,i) > 0) {
+          sum1 = sum1 +
+            delta(j,i)*I1(i,j)*deriv_vec[m](j,i)*(
+                I3(i,j) -
+                I2(i,j)*(std::exp(logtheta(j,i)))/(riskset(j,i) + I2(i,j)*(std::exp(logtheta(j,i)) - 1))
+            );
+        } else {sum1 = sum1 + 0;}
+      }
+    }
+  
+    /* Calculation of L2 */
+    for (int i=0; i<n; i++) {
+      for (int j=0; j<n; j++) {
+        if (riskset(i,j) > 0) {
+          sum2 = sum2 +
+            delta(i,j)*I2(j,i)*deriv_vec[m](i,j)*(
+                I4(i,j) -
+                I1(j,i)*(std::exp(logtheta(i,j)))/(riskset(i,j) + I1(j,i)*(std::exp(logtheta(i,j)) - 1))
+            );
+        } else {sum2 = sum2 + 0;}
+      }
+    }
+  
+    result[m] = -sum1-sum2;
+    
+  }
+
+  return(result);
+  
+}
+
+
 // [[Rcpp::export]]
 NumericMatrix hessianC(const NumericMatrix riskset,
                 const NumericMatrix logtheta,

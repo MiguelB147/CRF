@@ -8,13 +8,13 @@ library(splines)
 source("cars-functions.R")
 
 
-fit.gam <- gam(mpg ~ s(hp, k = 20, bs = "ps"), data = mtcars, optimizer = 'efs')
+fit.gam <- gam(mpg ~ s(hp, k = 20, bs = "cr"), data = mtcars, optimizer = 'efs')
 c(fit.gam$coef, fit.gam$sig2)
 fit.gam$sp
 fit.gam$sig2
 
 test <- EstimatePenal(dim = 20, lambda.init = 1, step.control = F, type = "gps", quantile = TRUE)
-test2 <- EstimatePenal(dim = 20, lambda.init = 1, step.control = F, type = "bs", quantile = FALSE)
+test2 <- EstimatePenal(dim = 20, lambda.init = 1, step.control = F, type = "bs", quantile = TRUE)
 y.ps <- test$X %*% test$beta
 y.bs <- test2$X %*% test2$beta
 

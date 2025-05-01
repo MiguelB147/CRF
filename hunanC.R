@@ -1,5 +1,4 @@
 
-library(copula)
 library(Rcpp)
 library(rootSolve)
 
@@ -143,40 +142,101 @@ dev.off()
 
 # Fellner - Schall method ----
 
-library(copula)
-library(Rcpp)
-library(rootSolve)
+#######################################
+
+# hunan-functions.R
 
 source('hunan-functions.R')
 sourceCpp('test.cpp')
 
-degree = 3
-df = 7
-K <- 1000
-unif.ub <- NULL # 5 = 20% censoring, 2.3 = 40% censoring
+set.seed(123)
+datalist <- SimData(K = 1000, w = c(0.2, 0.5, 0.3), alpha = c(3, 3, 2))
+
+obj1 <- WoodSpline(t = datalist$X[,1], dim = 7, degree = 3)
+obj2 <- WoodSpline(t = datalist$X[,2], dim = 7, degree = 3)
+
+X1 <- obj1$X
+X2 <- obj2$X
+
+beta <- multiroot(Score2, start = rep(1, 7^2), rtol = 1e-10, X1 = X1, X2 = X2, Sl = NULL, datalist = datalist)$root
+H <- derivatives2(coef.vector = beta, X1 = X1, X2 = X2, datalist = datalist, gradient = FALSE, hessian = TRUE)$hessian
+
+# hunan-functions2.R
+
+source('hunan-functions2.R')
+sourceCpp('test2.cpp')
 
 set.seed(123)
-datalist <- SimData(K = K)
+datalist <- SimData(K = 1000, w = c(0.2, 0.5, 0.3), alpha = c(3, 3, 2))
 
-fit <- EstimatePenal2(datalist = datalist, dim = 7, lambda.init = c(100,100), repara = FALSE)
+obj1 <- WoodSpline(t = datalist$X[,1], dim = 7, degree = 3)
+obj2 <- WoodSpline(t = datalist$X[,2], dim = 7, degree = 3)
 
-plot.grid <- expand.grid(seq(0.25,3,by=0.25), seq = seq(0.1,3,by = 0.05))
+X1 <- obj1$X
+X2 <- obj2$X
+
+Pen <- WoodPenalty(obj1, obj2)
+
+Sl <- Pen[[1]] + Pen[[2]]
+
+deriv <- deriv_comp(X1 = X1, X2 = X2, datalist = datalist)
+beta <- multiroot(Score2, start = rep(1, 7^2),
+                  jacfunc = Hessian, jactype = "fullusr", rtol = 1e-10,
+                  X1 = X1, X2 = X2, deriv = deriv, datalist = datalist, Sl = Sl)$root
+test <- nleqslv(x = rep(1, 7^2), fn = Score2, jac = Hessian, method = "Broyden", global = "hook",
+                X1 = X1, X2 = X2, deriv = deriv, datalist = datalist, Sl = Sl)
+beta2 <- test$x
+H1 <- Hessian(coef.vector = beta, X1 = X1, X2 = X2, deriv = deriv, datalist = datalist, Sl = Sl)
+H2 <- Hessian(coef.vector = beta2, X1 = X1, X2 = X2, deriv = deriv, datalist = datalist, Sl = Sl)
+
+H1[1:3,1:3]
+H2[1:3,1:3]
+
+#######################################
+
+
+
+
+
+library(Rcpp)
+
+source('hunan-functions2.R')
+sourceCpp('test2.cpp')
+
+set.seed(123)
+datalist <- SimData(K = 1000, w = c(0.2, 0.5, 0.3), alpha = c(3, 3, 2), margin = "unif")
+
+plot.grid <- expand.grid(seq(0.25,5,by=0.25), seq = seq(0.1,5,by = 0.05))
 names(plot.grid) <- c("time1","time2")
-plot.grid$true <- theta.mix(plot.grid$time1, plot.grid$time2)
+plot.grid$true <- theta.mix(plot.grid$time1, plot.grid$time2, w = c(0.2, 0.5, 0.3), alpha = c(3, 3, 2))
+
 # plot.grid$true <- theta.frank(plot.grid$time1, plot.grid$time2)
+# fit.poly <- multiroot(f = poly.fit, start = rep(0,10), datalist = datalist); poly <- exp(polynomial(plot.grid$time1, plot.grid$time2, fit.poly$root))
+
+fit <- EstimatePenal2(datalist = datalist, dim = 10, lambda.init = c(10,10), quantile = FALSE, type = "ps", repara = FALSE)
+fit.poly <- EstimatePoly(datalist = datalist)
+
+poly <- exp(polynomial(plot.grid$time1, plot.grid$time2, fit.poly))
 CRF <- WoodTensor.predict(plot.grid$time1, plot.grid$time2, fit)
 
-pdf("mixure7ps.pdf")
+pdf("mixtureunifgps.pdf")
 par(mfrow = c(2,3))
 for (i in unique(plot.grid$time1)) {
   plottext <- paste0("t[1] == ", i)
   plot(x = plot.grid$time2[plot.grid$time1 == i],
        y = plot.grid$true[plot.grid$time1 == i],
        type = 'l', lwd = 2, col = "grey",
-       ylim = c(0,3),
+       xlim = c(0, max(plot.grid$time2)),
+       ylim = c(0,7),
        ylab = "CRF", xlab = expression(t[2]), main = parse(text = plottext))
-  lines(x = plot.grid$time2[plot.grid$time1 == i], y = CRF[plot.grid$time1 == i], col = "red", lwd = 2)
-  }
+  
+  # lines(x = plot.grid$time2[plot.grid$time1 == i], y = CRF[plot.grid$time1 == i], col = "red", lwd = 2)
+  # for (j in 1:length(fit$knots[["knots2"]])) {
+  #   abline(v = fit$knots[["knots2"]][j], col = "lightgrey")
+  # }
+  
+  lines(x = plot.grid$time2[plot.grid$time1 == i], y = poly[plot.grid$time1 == i], col = "blue", lwd = 2)
+}
 par(mfrow = c(1,1))
 dev.off()
 
@@ -192,13 +252,6 @@ dev.off()
 #                                        degree = degree, df = df, knots = datalist$knots)),
 #               plot.grid$time1,
 #               plot.grid$time2)
-
-
-
-
-
-
-
 
 
 MatToVec <- function(Matrix) {

@@ -5,7 +5,7 @@ data("mcycle")
 
 source("motorcycle-functions.R")
 
-gam.fit <- gam(accel ~ s(times, k = 20, bs = "ps"), data = mcycle, optimizer = "efs")
+gam.fit <- gam(accel ~ s(times, k = 20, bs = "cr"), data = mcycle, optimizer = "efs")
 gam.fit$sp
 gam.fit$sig2
 

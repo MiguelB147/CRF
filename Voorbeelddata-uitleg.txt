@@ -1,0 +1,13 @@
+voorbeelddata.RData: 
+  - sample data volgens artikel Hu (2011)
+  - gebruik theta.frank voor predict
+  
+mixture.RData:
+  - sample data van mixture copula
+  - standard exponential margins
+  - gebruik theta.mix default (w = c(0.2,0.4,0.4), alpha = c(2,3,1.25))
+ 
+mixtureunif.RData
+  - sample data van mixture copula
+  - Unif(0,5) margins
+  - gebruik theta.mix default (w = c(0.2, 0.5, 0.3), alpha = c(3, 3, 2)) 
