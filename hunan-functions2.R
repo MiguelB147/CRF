@@ -255,7 +255,7 @@ WoodSpline <- function(t, dim, degree = 3, type = "ps", quantile = FALSE, scale 
     D1 <- D1/sqrt(maS)
   } else maS <- NULL
   
-  # Reparametrization
+  # Reparametrization ----
   if (repara) {
     # G <- t(splines::splineDesign(knots, seq(min(t),max(t),length=dim), degree+1))
     # Gm <- solve(G)
